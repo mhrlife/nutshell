@@ -30,35 +30,20 @@ On Windows, in PowerShell:
 irm https://github.com/mhrlife/nutshell/releases/latest/download/install.ps1 | iex
 ```
 
-The installer picks the build for your machine (Linux, macOS and Windows, on
-amd64 and arm64), checks it against `checksums.txt`, drops the binary in
-`~/.nutshell/bin` (`%LOCALAPPDATA%\nutshell\bin` on Windows) and puts that
-directory on your `PATH`. `--version v0.1.0` pins a release, `--dir <path>`
-changes where it lands and `--no-modify-path` leaves your shell config alone;
-the PowerShell script takes the same options as `-Version`, `-Dir` and
-`-NoModifyPath`.
+The script picks the build for your machine, checks it against
+`checksums.txt`, and puts `nutshell` on your `PATH`.
 
-Or take the archive from the
-[latest release](https://github.com/mhrlife/nutshell/releases/latest) yourself:
+Two more things before the first run:
 
-```sh
-tar xzf nutshell_0.1.0_darwin_arm64.tar.gz
-sudo mv nutshell /usr/local/bin/
-```
+1. The agent's CLI has to be on your `PATH` — `claude` for Claude Code.
+2. Set an OpenRouter key. Speech-to-text and text-to-speech both run through
+   OpenRouter, so that key is what makes voice work:
 
-Or build it from source:
+   ```sh
+   export OPENROUTER_API_KEY=sk-or-...
+   ```
 
-```sh
-go install github.com/mhrlife/nutshell/cmd/nutshell@latest
-```
-
-You need the agent's CLI on your `PATH` (`claude`) and an OpenRouter key:
-
-```sh
-export OPENROUTER_API_KEY=sk-or-...
-```
-
-Without a key the UI still works with typed messages; voice is switched off.
+   Without it the UI still works with typed messages; voice is switched off.
 
 ## Run
 
@@ -134,7 +119,6 @@ any earlier message to bring its full text back.
   trailing `+` means the agent did not report its share.
 - Questions and answers are shown in whatever language they were written in,
   with right-to-left layout and the Vazirmatn font for Persian.
-
 - When the agent needs you mid-turn — permission to edit a file or run a
   command, or an answer to a question it raised — the turn stops and the
   request takes over the screen. Pick an option and the agent carries on;
@@ -155,9 +139,9 @@ The agent is told to end every reply with:
 <full>the complete reply in Markdown</full>
 ```
 
-The summary deliberately drops most of the detail. It is meant to be heard,
-not read, and it covers what was asked for rather than reporting everything
-the agent did along the way. The full text keeps everything.
+The summary drops most of the detail. It is meant to be heard, not read, and
+it covers what was asked for rather than reporting everything the agent did
+along the way. The full text keeps everything.
 
 ## Adding another agent
 

@@ -5,18 +5,7 @@ import "github.com/mhrlife/nutshell/internal/lang"
 // LectureStyle is the default delivery instruction placed before the spoken
 // text. Gemini TTS reads natural-language directions ahead of the transcript
 // and speaks only what follows "Transcript:".
-const LectureStyle = `Synthesize the following as a clear educational lecture.
-
-Style:
-- Neutral and professional.
-- Low emotional expressiveness.
-- Do not sound excited, theatrical, conversational, or overly friendly.
-- Avoid exaggerated pitch changes and dramatic pauses.
-- Maintain a steady rhythm and consistent volume.
-- Prioritize clarity and information density over personality.
-
-Pacing: Fast
-`
+const LectureStyle = `[Professional, Fast Pace] `
 
 // SpeakInstruction returns everything put before the text to speak: how to
 // deliver it, which language it is in and how that language sounds, then the
