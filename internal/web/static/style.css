@@ -78,6 +78,9 @@ html[dir="rtl"] .brand { font-weight: 700; }
 
 .status .live { color: var(--accent); }
 
+/* a failure the person needs to notice, not another quiet status line */
+.status .alert { color: var(--danger); }
+
 .transcript { flex: 1; overflow-y: auto; padding: 8px 28px 24px; display: flex; flex-direction: column; gap: 28px; }
 
 .empty { margin: auto 0; }

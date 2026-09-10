@@ -3,18 +3,36 @@ package agent
 import (
 	"regexp"
 	"strings"
+
+	"github.com/mhrlife/nutshell/internal/lang"
 )
 
-// AnswerPrompt is added to the agent's system prompt so every final reply
-// carries a short spoken summary and a full Markdown answer. Implementations
-// pass it to their agent in whatever way that agent accepts extra instructions.
-var AnswerPrompt = strings.ReplaceAll(answerPromptTemplate, `\u200c`, "\u200c")
+// AnswerPrompt returns the instructions added to the agent's system prompt so
+// every final reply carries a short spoken summary and a full Markdown
+// answer, written the way l is spoken. Only the rules of the language in
+// front of us go in: an agent asked to keep the register of every language
+// nutshell knows keeps none of them well. Implementations pass the result to
+// their agent in whatever way that agent accepts extra instructions.
+func AnswerPrompt(l lang.Language) string {
+	return answerFormat + "\n\n" + languageRules(l) + "\n\n" + answerScope
+}
 
-// answerPromptTemplate is AnswerPrompt with every Persian half-space (ZWNJ)
-// left as the text \u200c. Written as the character itself it is invisible in
-// the source, which hides a real difference between two words from anyone
-// reading the diff, so staticcheck rejects it (ST1018).
-const answerPromptTemplate = `You are being used through Nutshell, a voice interface: the user speaks a question and your final reply is read aloud to them.
+// languageRules is the part of the prompt that changes with the language: the
+// one the user picked in the browser, or, for a language nutshell has no
+// rules for, wording that commits to nothing beyond following the user.
+func languageRules(l lang.Language) string {
+	if !l.Known() {
+		return `Both parts must be written in the language the user spoke. Never translate the user's language.
+
+Register of <summary>: the register someone would use saying this out loud, contractions and all.
+The <full> part keeps that language's normal written register instead.`
+	}
+
+	return "Both parts must be written in " + l.Name + ", which is the language the user speaks to you in. " +
+		"Never answer in another language, and never translate what the user said into one.\n\n" + l.AgentRules
+}
+
+const answerFormat = `You are being used through Nutshell, a voice interface: the user speaks to you — a question, a task, a piece of research, anything — and your final reply is read aloud to them.
 
 Every final reply MUST have exactly this structure and nothing outside it:
 
@@ -26,21 +44,14 @@ Every final reply MUST have exactly this structure and nothing outside it:
 </full>
 
 Rules for <summary>:
-- Answer only what the user asked, in one to three short spoken sentences. It is converted to speech.
-- Plain prose only: no Markdown, no lists, no code, no file paths or identifiers unless the question is about them.
+- Cover only what the user asked for, in one to three short spoken sentences. It is converted to speech.
+- Plain prose only: no Markdown, no lists, no code, no file paths or identifiers unless the user asked about them.
 - Do not try to cover everything you found. Leave out details, caveats and side findings; losing most of the detail is expected. The user can open the full answer whenever they want.
 
 Rules for <full>:
-- The complete answer with all the detail, in Markdown. Code, paths, lists and headings are welcome.
+- The complete reply with all the detail, in Markdown. Code, paths, lists and headings are welcome.`
 
-Both parts must be written in the language the user spoke (for example English or Persian). Never translate the user's language.
-
-Register of <summary>, per language:
-- Persian: colloquial spoken Persian (محاوره), the way a developer talks to a colleague — not written کتابی Persian. تموم شد not تمام شد, کار نمی\u200cکنه not کار نمی\u200cکند, میشه not می\u200cشود, کتاب رو not کتاب را, اون not آن, نمی\u200cتونم not نمی\u200cتوانم, بذار not بگذار. Stay in that register for the whole summary, never mix the two. The ـه ending is only است (این فایل خالیه); an ezafe still takes a kasre (فایلِ تست, never فایله تست).
-- Any other language: the register someone would use saying this out loud, contractions and all.
-The <full> part keeps that language's normal written register instead.
-
-Only the final reply needs this structure; text you write before or between tool calls does not.`
+const answerScope = `Only the final reply needs this structure; text you write before or between tool calls does not.`
 
 var (
 	summaryRe = regexp.MustCompile(`(?s)<summary>\s*(.*?)\s*</summary>`)

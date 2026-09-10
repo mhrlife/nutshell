@@ -3,28 +3,54 @@ package speech
 import (
 	"strings"
 	"testing"
+
+	"github.com/mhrlife/nutshell/internal/lang"
 )
 
-func TestResolvePrompt(t *testing.T) {
+func TestResolveStyle(t *testing.T) {
 	t.Parallel()
 
-	if got := ResolvePrompt(PromptLecture); got != LecturePrompt || !strings.HasSuffix(got, "Transcript:\n") {
+	if got := ResolveStyle(StyleLecture); got != LectureStyle {
 		t.Errorf("lecture preset = %q", got)
 	}
 
-	if got := ResolvePrompt(PromptNone); got != "" {
+	if got := ResolveStyle(StyleNone); got != "" {
 		t.Errorf("none preset = %q", got)
 	}
 
-	if got := ResolvePrompt("Read slowly."); got != "Read slowly.\n" {
+	if got := ResolveStyle("Read slowly."); got != "Read slowly.\n" {
 		t.Errorf("literal = %q", got)
+	}
+}
+
+func TestSpeakInstruction(t *testing.T) {
+	t.Parallel()
+
+	persian := SpeakInstruction(LectureStyle, lang.Lookup("fa"))
+	if !strings.Contains(persian, "Persian (Farsi)") {
+		t.Errorf("the voice was not told the language:\n%s", persian)
+	}
+
+	// The model speaks what follows the header, so it has to come last.
+	if !strings.HasSuffix(persian, "Transcript:\n") {
+		t.Errorf("instruction does not end with the transcript header:\n%s", persian)
+	}
+
+	if got := SpeakInstruction(LectureStyle, lang.Lookup("xx")); !strings.HasSuffix(got, "Transcript:\n") ||
+		strings.Contains(got, "Language:") {
+		t.Errorf("a language without a note should add none:\n%s", got)
+	}
+
+	// --tts-prompt=none means the text goes out on its own.
+	if got := SpeakInstruction("", lang.Lookup("fa")); got != "" {
+		t.Errorf("no style = %q", got)
 	}
 }
 
 func TestTranscribeInstruction(t *testing.T) {
 	t.Parallel()
 
-	bare := TranscribeInstruction("")
+	bare := TranscribeInstruction(lang.Lookup("xx"))
 	if bare != TranscribePrompt {
 		t.Errorf("no hint = %q", bare)
 	}
@@ -37,8 +63,8 @@ func TestTranscribeInstruction(t *testing.T) {
 		}
 	}
 
-	hinted := TranscribeInstruction("Persian (Farsi)")
-	if !strings.HasPrefix(hinted, TranscribePrompt) || !strings.HasSuffix(hinted, "speaks Persian (Farsi).") {
+	hinted := TranscribeInstruction(lang.Lookup("fa"))
+	if !strings.HasPrefix(hinted, TranscribePrompt) || !strings.Contains(hinted, "speaks Persian (Farsi)") {
 		t.Errorf("hinted = %q", hinted)
 	}
 }

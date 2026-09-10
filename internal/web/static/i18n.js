@@ -1,6 +1,9 @@
 // Language registry. Each file in lang/ calls registerLanguage() with its
-// code, display name, text direction, a hint for the speech-to-text model,
-// and the UI strings. The settings panel lists whatever is registered.
+// code, display name, text direction and the UI strings. The settings panel
+// lists whatever is registered. What the models are told about a language
+// (how to transcribe it, how to speak it, how a reply in it must read) lives
+// on the server in internal/lang, keyed by the same code; every request
+// carries the code so the server can pick those rules.
 
 const LANGUAGES = [];
 

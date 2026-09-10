@@ -19,6 +19,7 @@ let selected = null;
 let player = null; // { audio, turn }
 let pendingStt = null; // cost of the last transcription, charged to the next question
 let notice = ''; // transient message shown in the status line
+let noticeIsError = false;
 
 const agentName = () => cfg.agent || 'agent';
 
@@ -48,6 +49,7 @@ function renderState() {
   const live = state !== 'idle' || !!player;
   const waiting = state === 'working' && promptPending();
   setStatus(offline ? t('offline') : notice || (waiting ? t('promptWaiting') : player ? t('speaking') : t(state)), live);
+  el.status.classList.toggle('alert', !!notice && noticeIsError);
   el.talk.disabled = state === 'working' || state === 'transcribing';
   el.talk.classList.toggle('listening', state === 'listening');
   el.talk.classList.toggle('transcribing', state === 'transcribing');
@@ -64,10 +66,18 @@ function setFootNote(text) {
   el.footNote.hidden = !text;
 }
 
-function flash(message) {
+// flash puts one line in the status bar. Failures stay up longer and are
+// coloured, because the only other sign of them is a screen that did nothing.
+function flash(message, isError) {
   notice = message;
+  noticeIsError = !!isError;
   renderState();
-  setTimeout(() => { if (notice === message) { notice = ''; renderState(); } }, 4000);
+  setTimeout(() => {
+    if (notice !== message) return;
+    notice = '';
+    noticeIsError = false;
+    renderState();
+  }, isError ? 8000 : 4000);
 }
 
 // ---- turns -----------------------------------------------------------------
@@ -170,9 +180,9 @@ async function startListening() {
   recorder = new Recorder();
   try {
     await recorder.start();
-  } catch {
+  } catch (err) {
     recorder = null;
-    flash(t('micDenied'));
+    fail('microphone', 'micDenied', err);
     return;
   }
   state = 'listening';
@@ -185,20 +195,25 @@ async function stopListening() {
   clearInterval(timer);
   const rec = recorder;
   recorder = null;
+  if (!rec) { // nothing was being recorded: say so rather than throwing
+    logIssue('warn', 'record', 'stop with no recording in progress');
+    state = 'idle';
+    renderState();
+    return;
+  }
   state = 'transcribing';
   renderState();
   try {
     const wav = await rec.stop();
-    if (!wav) return;
-    const lang = languageByCode(settings.lang) || {};
+    if (!wav) { warn('record', 'tooShort'); return; }
     const resp = await fetch('/api/transcribe', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ audio: wav, format: 'wav', hint: lang.sttHint || '' }),
+      body: JSON.stringify({ audio: wav, format: 'wav', lang: settings.lang }),
     });
-    if (!resp.ok) throw new Error((await resp.json()).error || resp.statusText);
+    if (!resp.ok) throw await httpError(resp);
     const { text, cost_usd: cost } = await resp.json();
     pendingStt = cost || 0;
-    if (!text) return;
+    if (!text) { warn('transcribe', 'noSpeech'); return; }
     if (settings.autoSend) {
       state = 'idle';
       ask(text);
@@ -209,7 +224,7 @@ async function stopListening() {
       flash(t('hintEdit'));
     }
   } catch (err) {
-    flash(err.message);
+    fail('transcribe', 'transcribeFailed', err);
   } finally {
     if (state === 'transcribing') { state = 'idle'; renderState(); }
   }
@@ -239,13 +254,15 @@ async function speak(turn) {
     try {
       const resp = await fetch('/api/speak', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: plainText(turn.answer.summary) }),
+        body: JSON.stringify({ text: plainText(turn.answer.summary), lang: settings.lang }),
       });
-      if (!resp.ok) throw new Error((await resp.json()).error || resp.statusText);
+      if (!resp.ok) throw await httpError(resp);
       turn.audio = URL.createObjectURL(await resp.blob());
       priceClip(turn, resp.headers.get('X-Generation-Id'));
     } catch (err) {
-      failTurn(turn, err.message);
+      const detail = errText(err);
+      logIssue('error', 'speak', detail);
+      failTurn(turn, t('speakFailed').replace('{error}', detail));
       return;
     } finally {
       turn.loadingAudio = false;
@@ -266,10 +283,12 @@ async function priceClip(turn, id) {
   if (!id) return;
   try {
     const resp = await fetch(`/api/cost?id=${encodeURIComponent(id)}`);
-    if (!resp.ok) return;
+    if (!resp.ok) { logIssue('warn', 'cost', errText(await httpError(resp))); return; }
     turn.cost.tts = (await resp.json()).cost_usd || 0;
     renderCosts();
-  } catch { /* cost stays unknown */ }
+  } catch (err) { // the answer is fine; only its price is unknown
+    logIssue('warn', 'cost', errText(err));
+  }
 }
 
 function stopPlayback() {
@@ -357,13 +376,18 @@ function fmtTime(ms) {
 
 (async () => {
   try {
-    cfg = await (await fetch('/api/config')).json();
-  } catch { /* offline defaults */ }
+    const resp = await fetch('/api/config');
+    if (!resp.ok) throw await httpError(resp);
+    cfg = await resp.json();
+  } catch (err) { // the page loaded but the server is not answering
+    logIssue('error', 'config', errText(err));
+    offline = true;
+  }
   await loadSettings(cfg.lang);
   marked.setOptions({ gfm: true, breaks: false });
   applyLanguage();
   renderSettingsPanel(applyLanguage);
   renderDoc();
   connect();
-  if (!cfg.voice) flash(t('noVoice'));
+  if (!cfg.voice) flash(t('noVoice'), true);
 })();

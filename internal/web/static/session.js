@@ -12,7 +12,13 @@ let workTimer = null;
 
 function connect() {
   const stream = new EventSource('/api/stream');
-  stream.onmessage = (e) => apply(JSON.parse(e.data));
+  stream.onmessage = (e) => {
+    try {
+      apply(JSON.parse(e.data));
+    } catch (err) { // a malformed entry must not stop the rest of the stream
+      logIssue('error', 'stream', errText(err), e.data);
+    }
+  };
   stream.addEventListener('synced', () => {
     synced = true;
     if (offline) { offline = false; renderState(); }
@@ -20,6 +26,7 @@ function connect() {
   stream.onerror = () => {
     if (offline) return;
     offline = true;
+    logIssue('warn', 'stream', 'event stream dropped, reconnecting');
     renderState();
   };
 }
@@ -31,7 +38,10 @@ function apply(entry) {
   if (kind === 'question') { addTurn(id, data.text); startWork(id, data.started); return; }
 
   const turn = turns.find((x) => x.id === id);
-  if (!turn) return;
+  if (!turn) { // the page and the server disagree about what exists
+    logIssue('warn', 'stream', `entry for a turn this page never saw (turn ${id}, ${kind})`);
+    return;
+  }
 
   if (kind === 'tool') showActivity(turn, data.name || 'tool', data.detail || '');
   else if (kind === 'text') showActivity(turn, 'think', data.text);
@@ -73,17 +83,20 @@ function tickWork() {
 // other, so this tab draws it exactly the way a second tab would.
 async function ask(question) {
   question = question.trim();
-  if (!question || state === 'working') return;
+  if (!question) return; // an empty box is not a failure, just nothing to send
+  if (state === 'working') { warn('ask', 'stillWorking'); return; }
   stopPlayback();
   el.input.value = '';
   resizeInput();
   try {
     const resp = await fetch('/api/ask', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: question }),
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: question, lang: settings.lang }),
     });
-    if (!resp.ok) throw new Error((await resp.json()).error || resp.statusText);
-  } catch (err) {
-    flash(err.message);
+    if (!resp.ok) throw await httpError(resp);
+  } catch (err) { // the question never reached the agent: put the text back
+    el.input.value = question;
+    resizeInput();
+    fail('ask', 'askFailed', err);
   }
 }
 
@@ -92,8 +105,11 @@ async function ask(question) {
 async function answerPrompt(turn, prompt, id, choices) {
   showActivity(turn, prompt.kind === 'choice' ? t('promptQuestion') : t('promptPermission'), promptSummary(choices));
   try {
-    await fetch('/api/answer', {
+    const resp = await fetch('/api/answer', {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, choices }),
     });
-  } catch { /* the prompt was withdrawn while we answered it */ }
+    if (!resp.ok) throw await httpError(resp);
+  } catch (err) { // usually the prompt was withdrawn while we answered it
+    fail('answer', 'answerFailed', err);
+  }
 }

@@ -6,17 +6,19 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"strings"
 	"sync/atomic"
 
 	"github.com/mhrlife/nutshell/internal/agent"
+	"github.com/mhrlife/nutshell/internal/lang"
 	"github.com/mhrlife/nutshell/internal/speech"
 )
 
 // Speech is what the server needs from the speech provider.
 type Speech interface {
 	Enabled() bool
-	Transcribe(ctx context.Context, audioB64, format, langHint string) (speech.Transcript, error)
-	Speak(ctx context.Context, text string) (speech.Clip, error)
+	Transcribe(ctx context.Context, audioB64, format string, l lang.Language) (speech.Transcript, error)
+	Speak(ctx context.Context, text string, l lang.Language) (speech.Clip, error)
 	GenerationCost(ctx context.Context, id string) (float64, error)
 }
 
@@ -61,6 +63,7 @@ func New(ag agent.Agent, sp Speech, st Settings, static http.FileSystem, cfg Con
 	s.mux.HandleFunc("POST /api/speak", s.handleSpeak)
 	s.mux.HandleFunc("GET /api/cost", s.handleCost)
 	s.mux.HandleFunc("GET /api/settings", s.handleGetSettings)
+	s.mux.HandleFunc("POST /api/log", s.handleClientLog)
 	s.mux.HandleFunc("PUT /api/settings", s.handlePutSettings)
 
 	return s
@@ -69,15 +72,18 @@ func New(ag agent.Agent, sp Speech, st Settings, static http.FileSystem, cfg Con
 // ServeHTTP implements http.Handler.
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store")
-	s.mux.ServeHTTP(w, r)
+
+	if !strings.HasPrefix(r.URL.Path, "/api/") {
+		s.mux.ServeHTTP(w, r)
+
+		return
+	}
+
+	s.logAPI(s.mux, w, r)
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(v)
-}
-
-func writeError(w http.ResponseWriter, status int, err error) {
-	writeJSON(w, status, map[string]string{"error": err.Error()})
 }

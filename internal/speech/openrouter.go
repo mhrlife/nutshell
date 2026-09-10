@@ -8,9 +8,12 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/mhrlife/nutshell/internal/lang"
 )
 
 const (
@@ -43,7 +46,7 @@ type Config struct {
 	STTModel string // chat model with audio input, e.g. google/gemini-3.8-flash
 	TTSModel string // audio/speech model, e.g. google/gemini-3.1-flash-tts-preview
 	Voice    string // voice name understood by TTSModel
-	Prompt   string // instruction text placed before the transcript, see ResolvePrompt
+	Style    string // delivery instructions placed before the transcript, see ResolveStyle
 }
 
 // Client talks to OpenRouter. The zero value is disabled.
@@ -62,9 +65,10 @@ func (c *Client) Enabled() bool { return c != nil && c.cfg.APIKey != "" }
 
 // Transcribe returns the words spoken in a base64-encoded audio clip.
 // format is the container name OpenRouter expects, e.g. "wav" or "mp3".
-// langHint, when not empty, tells the model which language to expect.
-func (c *Client) Transcribe(ctx context.Context, audioB64, format, langHint string) (Transcript, error) {
-	instruction := TranscribeInstruction(langHint)
+// l is the language the browser had selected, which tells the model what to
+// expect from the microphone.
+func (c *Client) Transcribe(ctx context.Context, audioB64, format string, l lang.Language) (Transcript, error) {
+	instruction := TranscribeInstruction(l)
 
 	body := map[string]any{
 		"model": c.cfg.STTModel,
@@ -112,11 +116,11 @@ func (c *Client) Transcribe(ctx context.Context, audioB64, format, langHint stri
 	return Transcript{Text: strings.TrimSpace(out.Choices[0].Message.Content), CostUSD: out.Usage.Cost}, nil
 }
 
-// Speak converts text to a WAV clip.
-func (c *Client) Speak(ctx context.Context, text string) (Clip, error) {
-	if c.cfg.Prompt != "" {
-		text = c.cfg.Prompt + text
-	}
+// Speak converts text to a WAV clip. l is the language the text is written
+// in, so the voice reads it the way that language is spoken rather than
+// sounding out foreign words.
+func (c *Client) Speak(ctx context.Context, text string, l lang.Language) (Clip, error) {
+	text = SpeakInstruction(c.cfg.Style, l) + text
 
 	body := map[string]any{
 		"model":           c.cfg.TTSModel,
@@ -171,10 +175,14 @@ func (c *Client) do(ctx context.Context, method, url string, body io.Reader) (*h
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-Title", "nutshell")
 
+	started := time.Now()
+
 	resp, err := c.http.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("calling openrouter: %w", err)
 	}
+
+	slog.Debug("openrouter", "url", url, "status", resp.Status, "ms", time.Since(started).Milliseconds())
 
 	if resp.StatusCode/100 != 2 {
 		defer resp.Body.Close()

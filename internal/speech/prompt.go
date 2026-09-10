@@ -1,9 +1,11 @@
 package speech
 
-// LecturePrompt is the default instruction placed before the spoken text.
-// Gemini TTS reads natural-language directions ahead of the transcript and
-// speaks only what follows "Transcript:".
-const LecturePrompt = `Synthesize the following as a clear educational lecture.
+import "github.com/mhrlife/nutshell/internal/lang"
+
+// LectureStyle is the default delivery instruction placed before the spoken
+// text. Gemini TTS reads natural-language directions ahead of the transcript
+// and speaks only what follows "Transcript:".
+const LectureStyle = `Synthesize the following as a clear educational lecture.
 
 Style:
 - Neutral and professional.
@@ -14,9 +16,24 @@ Style:
 - Prioritize clarity and information density over personality.
 
 Pacing: Fast
-
-Transcript:
 `
+
+// SpeakInstruction returns everything put before the text to speak: how to
+// deliver it, which language it is in and how that language sounds, then the
+// header the model expects ahead of the transcript. An empty style is the
+// user asking for no directions at all (--tts-prompt=none), and the text goes
+// out bare.
+func SpeakInstruction(style string, l lang.Language) string {
+	if style == "" {
+		return ""
+	}
+
+	if l.TTSNote != "" {
+		style += "\nLanguage: " + l.TTSNote + "\n"
+	}
+
+	return style + "\nTranscript:\n"
+}
 
 // TranscribePrompt instructs the speech-to-text model. The code-switching
 // rule is what stops a Persian sentence about the AskUserQuestion tool coming
@@ -38,29 +55,30 @@ script, loanwords included.
 Output only the transcript with normal punctuation: no quotes, no labels, no
 commentary. If the audio contains no speech, output nothing.`
 
-// TranscribeInstruction is TranscribePrompt plus what is known about the
-// speaker's language, which is free text such as "Persian (Farsi)".
-func TranscribeInstruction(langHint string) string {
-	if langHint == "" {
+// TranscribeInstruction is TranscribePrompt plus what the language chosen in
+// the browser says to expect from the microphone. A language nutshell has no
+// hint for leaves the model to work it out for itself.
+func TranscribeInstruction(l lang.Language) string {
+	if l.STTHint == "" {
 		return TranscribePrompt
 	}
 
-	return TranscribePrompt + "\n\nThe speaker most likely speaks " + langHint + "."
+	return TranscribePrompt + "\n\nThe speaker most likely speaks " + l.STTHint + "."
 }
 
-// Prompt presets selectable from the command line.
+// Delivery styles selectable from the command line.
 const (
-	PromptLecture = "lecture"
-	PromptNone    = "none"
+	StyleLecture = "lecture"
+	StyleNone    = "none"
 )
 
-// ResolvePrompt maps a --tts-prompt value to the text put before the
-// transcript: a preset name, or literal text used as-is.
-func ResolvePrompt(value string) string {
+// ResolveStyle maps a --tts-prompt value to the delivery instructions put
+// before the transcript: a preset name, or literal text used as-is.
+func ResolveStyle(value string) string {
 	switch value {
-	case PromptLecture:
-		return LecturePrompt
-	case PromptNone, "":
+	case StyleLecture:
+		return LectureStyle
+	case StyleNone, "":
 		return ""
 	default:
 		return value + "\n"

@@ -14,6 +14,7 @@ type Options struct {
 	Port      int
 	NoOpen    bool
 	Version   bool
+	Debug     bool
 	Lang      string
 	Agent     string
 	AgentBin  string
@@ -30,7 +31,7 @@ type Options struct {
 var ownFlags = map[string]bool{
 	"port": false, "no-open": true, "lang": false, "agent": false, "agent-bin": false,
 	"openrouter-key": false, "stt-model": false, "tts-model": false, "tts-voice": false,
-	"tts-prompt": false, "version": true, "help": true, "h": true,
+	"tts-prompt": false, "version": true, "debug": true, "help": true, "h": true,
 }
 
 // Parse splits args into nutshell options and agent arguments. getenv
@@ -45,6 +46,7 @@ func Parse(args []string, getenv func(string) string, out io.Writer) (Options, e
 	fs.IntVar(&o.Port, "port", 0, "port for the web UI (0 picks a free one)")
 	fs.BoolVar(&o.NoOpen, "no-open", false, "do not open the browser automatically")
 	fs.BoolVar(&o.Version, "version", false, "print the version and exit")
+	fs.BoolVar(&o.Debug, "debug", false, "log every API call, turn and OpenRouter request (--verbose stays the agent's own flag)")
 	fs.StringVar(&o.Lang, "lang", "en", "UI language code used until one is chosen in settings (the UI lists the available ones)")
 	fs.StringVar(&o.Agent, "agent", "claude", "coding agent to drive (claude)")
 	fs.StringVar(&o.AgentBin, "agent-bin", "", "path to the agent executable (default: the agent's usual name)")
@@ -52,7 +54,7 @@ func Parse(args []string, getenv func(string) string, out io.Writer) (Options, e
 	fs.StringVar(&o.STTModel, "stt-model", "google/gemini-3.8-flash", "OpenRouter model that transcribes speech")
 	fs.StringVar(&o.TTSModel, "tts-model", "google/gemini-3.1-flash-tts-preview", "OpenRouter model that speaks answers")
 	fs.StringVar(&o.TTSVoice, "tts-voice", "Schedar", "voice for the speech model")
-	fs.StringVar(&o.TTSPrompt, "tts-prompt", "lecture", "delivery instructions placed before the spoken text: \"lecture\" (built-in calm lecture style), \"none\", or literal text")
+	fs.StringVar(&o.TTSPrompt, "tts-prompt", "lecture", "delivery instructions placed before the spoken text: \"lecture\" (built-in calm lecture style), \"none\" (send the text bare, without even the language note), or literal text")
 	fs.Usage = func() {
 		fmt.Fprintln(out, "usage: nutshell [nutshell flags] [agent flags...]")
 		fmt.Fprintln(out)

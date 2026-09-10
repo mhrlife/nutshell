@@ -2,108 +2,16 @@ package server_test
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"net/http"
-	"net/http/httptest"
 	"strings"
 	"testing"
-	"testing/fstest"
 	"time"
 
 	"github.com/mhrlife/nutshell/internal/agent"
-	"github.com/mhrlife/nutshell/internal/server"
-	"github.com/mhrlife/nutshell/internal/speech"
 )
-
-type fakeAgent struct {
-	answer  agent.Answer
-	err     error
-	prompt  agent.Prompt     // when set, Ask puts it to the user before answering
-	replies chan agent.Reply // what the user replied
-}
-
-func (f *fakeAgent) Name() string { return "fake" }
-func (f *fakeAgent) Cancel()      {}
-func (f *fakeAgent) Close() error { return nil }
-
-func (f *fakeAgent) Ask(ctx context.Context, _ string, h agent.Handler) (agent.Answer, error) {
-	h.Progress(agent.Event{Kind: agent.KindTool, Tool: "Read", Detail: "a.go"})
-
-	if f.prompt.ID != "" {
-		reply, err := h.Prompt(ctx, f.prompt)
-		if err != nil {
-			return agent.Answer{}, err
-		}
-
-		f.replies <- reply
-	}
-
-	return f.answer, f.err
-}
-
-type fakeSettings struct{ doc json.RawMessage }
-
-func (f *fakeSettings) Load() (json.RawMessage, error) {
-	if f.doc == nil {
-		return json.RawMessage("{}"), nil
-	}
-
-	return f.doc, nil
-}
-
-func (f *fakeSettings) Save(doc json.RawMessage) error {
-	f.doc = doc
-
-	return nil
-}
-
-type fakeSpeech struct{ enabled bool }
-
-func (f fakeSpeech) Enabled() bool { return f.enabled }
-
-func (f fakeSpeech) Transcribe(_ context.Context, _, _, _ string) (speech.Transcript, error) {
-	return speech.Transcript{Text: "hello", CostUSD: 0.0002}, nil
-}
-
-func (f fakeSpeech) Speak(_ context.Context, _ string) (speech.Clip, error) {
-	return speech.Clip{Audio: []byte("RIFF"), GenerationID: "gen-1"}, nil
-}
-
-func (f fakeSpeech) GenerationCost(_ context.Context, id string) (float64, error) {
-	if id != "gen-1" {
-		return 0, errors.New("unknown generation")
-	}
-
-	return 0.001, nil
-}
-
-func newTestServer(ag agent.Agent) *httptest.Server {
-	static := http.FS(fstest.MapFS{"index.html": {Data: []byte("<h1>ui</h1>")}})
-	srv := server.New(ag, fakeSpeech{enabled: true}, &fakeSettings{}, static, server.Config{Lang: "en", Project: "demo"})
-
-	return httptest.NewServer(srv)
-}
-
-func post(t *testing.T, url, body string) *http.Response {
-	t.Helper()
-
-	req, err := http.NewRequestWithContext(context.Background(), http.MethodPost, url, strings.NewReader(body))
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	req.Header.Set("Content-Type", "application/json")
-
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	return resp
-}
 
 func TestAskStreamsTheTurn(t *testing.T) {
 	t.Parallel()
@@ -177,6 +85,29 @@ func TestStreamReplaysFromWhereTheClientStopped(t *testing.T) {
 	}
 }
 
+// The language is chosen in the browser and travels with the question, so
+// the agent can be told the rules of that language and no other.
+func TestAskCarriesTheBrowsersLanguage(t *testing.T) {
+	t.Parallel()
+
+	ag := &fakeAgent{answer: agent.Answer{Summary: "S"}, asked: make(chan agent.Request, 1)}
+
+	ts := newTestServer(ag)
+	defer ts.Close()
+
+	resp := post(t, ts.URL+"/api/ask", `{"text":"hi","lang":"fa"}`)
+	defer resp.Body.Close()
+
+	select {
+	case req := <-ag.asked:
+		if req.Language.Code != "fa" || !req.Language.Known() {
+			t.Errorf("agent got language %+v, want the Persian rules", req.Language)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("the agent was never asked")
+	}
+}
+
 func TestAskRejectsEmptyQuestion(t *testing.T) {
 	t.Parallel()
 
@@ -228,19 +159,23 @@ func TestTranscribeAndSpeak(t *testing.T) {
 	ts := newTestServer(&fakeAgent{})
 	defer ts.Close()
 
-	resp := post(t, ts.URL+"/api/transcribe", `{"audio":"AAAA","format":"wav","hint":"Persian"}`)
+	resp := post(t, ts.URL+"/api/transcribe", `{"audio":"AAAA","format":"wav","lang":"fa"}`)
 	defer resp.Body.Close()
 
 	body, _ := io.ReadAll(resp.Body)
-	if !strings.Contains(string(body), `"text":"hello"`) || !strings.Contains(string(body), `"cost_usd":0.0002`) {
+	if !strings.Contains(string(body), `"text":"hello fa"`) || !strings.Contains(string(body), `"cost_usd":0.0002`) {
 		t.Errorf("transcribe: %s", body)
 	}
 
-	audio := post(t, ts.URL+"/api/speak", `{"text":"hi"}`)
+	audio := post(t, ts.URL+"/api/speak", `{"text":"hi","lang":"fa"}`)
 	defer audio.Body.Close()
 
 	if ct := audio.Header.Get("Content-Type"); ct != "audio/wav" {
 		t.Errorf("content type = %q", ct)
+	}
+
+	if clip, _ := io.ReadAll(audio.Body); string(clip) != "RIFF fa" {
+		t.Errorf("the voice was not told the language: %s", clip)
 	}
 
 	if id := audio.Header.Get("X-Generation-Id"); id != "gen-1" {

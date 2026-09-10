@@ -6,6 +6,8 @@ package agent
 import (
 	"context"
 	"errors"
+
+	"github.com/mhrlife/nutshell/internal/lang"
 )
 
 // ErrCancelled is returned by Ask when the turn was aborted through Cancel.
@@ -43,6 +45,18 @@ type Answer struct {
 	CostKnown bool `json:"cost_known"`
 }
 
+// Request is one user message together with the language it was spoken in.
+// The language travels with every turn instead of being fixed at startup,
+// because it is chosen in the browser and can change between two questions.
+type Request struct {
+	// Text is what the user asked.
+	Text string
+	// Language is what the browser had selected when they asked it. A
+	// language nutshell has no rules for arrives as lang.Lookup returns it,
+	// and agents fall back to language-agnostic instructions.
+	Language lang.Language
+}
+
 // Agent is a conversational coding agent bound to one working directory.
 // Implementations keep conversation history between Ask calls.
 type Agent interface {
@@ -51,7 +65,7 @@ type Agent interface {
 	// Ask sends one user message and blocks until the final answer arrives.
 	// h receives progress events and any prompt the agent needs answered
 	// before it can carry on.
-	Ask(ctx context.Context, question string, h Handler) (Answer, error)
+	Ask(ctx context.Context, req Request, h Handler) (Answer, error)
 	// Cancel aborts the turn in progress, if any. The next Ask resumes the conversation.
 	Cancel()
 	// Close releases the agent's resources.

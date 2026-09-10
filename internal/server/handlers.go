@@ -8,9 +8,12 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"runtime/debug"
 	"strings"
+	"time"
 
 	"github.com/mhrlife/nutshell/internal/agent"
+	"github.com/mhrlife/nutshell/internal/lang"
 )
 
 const (
@@ -33,11 +36,11 @@ func (s *Server) handleTranscribe(w http.ResponseWriter, r *http.Request) {
 	var in struct {
 		Audio  string `json:"audio"`
 		Format string `json:"format"`
-		Hint   string `json:"hint"` // language the speaker most likely used, free text
+		Lang   string `json:"lang"` // language code selected in the browser
 	}
 
 	if err := decode(w, r, maxAudioRequest, &in); err != nil {
-		writeError(w, http.StatusBadRequest, err)
+		writeError(w, r, http.StatusBadRequest, err)
 
 		return
 	}
@@ -46,9 +49,9 @@ func (s *Server) handleTranscribe(w http.ResponseWriter, r *http.Request) {
 		in.Format = "wav"
 	}
 
-	tr, err := s.speech.Transcribe(r.Context(), in.Audio, in.Format, in.Hint)
+	tr, err := s.speech.Transcribe(r.Context(), in.Audio, in.Format, lang.Lookup(in.Lang))
 	if err != nil {
-		writeError(w, http.StatusBadGateway, err)
+		writeError(w, r, http.StatusBadGateway, err)
 
 		return
 	}
@@ -59,23 +62,24 @@ func (s *Server) handleTranscribe(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleSpeak(w http.ResponseWriter, r *http.Request) {
 	var in struct {
 		Text string `json:"text"`
+		Lang string `json:"lang"` // language the text is written in
 	}
 
 	if err := decode(w, r, maxTextRequest, &in); err != nil {
-		writeError(w, http.StatusBadRequest, err)
+		writeError(w, r, http.StatusBadRequest, err)
 
 		return
 	}
 
 	if strings.TrimSpace(in.Text) == "" {
-		writeError(w, http.StatusBadRequest, errors.New("nothing to say"))
+		writeError(w, r, http.StatusBadRequest, errors.New("nothing to say"))
 
 		return
 	}
 
-	clip, err := s.speech.Speak(r.Context(), in.Text)
+	clip, err := s.speech.Speak(r.Context(), in.Text, lang.Lookup(in.Lang))
 	if err != nil {
-		writeError(w, http.StatusBadGateway, err)
+		writeError(w, r, http.StatusBadGateway, err)
 
 		return
 	}
@@ -89,14 +93,14 @@ func (s *Server) handleSpeak(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleCost(w http.ResponseWriter, r *http.Request) {
 	id := r.URL.Query().Get("id")
 	if id == "" {
-		writeError(w, http.StatusBadRequest, errors.New("missing id"))
+		writeError(w, r, http.StatusBadRequest, errors.New("missing id"))
 
 		return
 	}
 
 	cost, err := s.speech.GenerationCost(r.Context(), id)
 	if err != nil {
-		writeError(w, http.StatusBadGateway, err)
+		writeError(w, r, http.StatusBadGateway, err)
 
 		return
 	}
@@ -112,13 +116,13 @@ func (s *Server) handleAnswer(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := decode(w, r, maxTextRequest, &in); err != nil {
-		writeError(w, http.StatusBadRequest, err)
+		writeError(w, r, http.StatusBadRequest, err)
 
 		return
 	}
 
 	if !s.prompts.answer(in.ID, agent.Reply{Choices: in.Choices}) {
-		writeError(w, http.StatusNotFound, errors.New("that question is no longer waiting for an answer"))
+		writeError(w, r, http.StatusNotFound, errors.New("that question is no longer waiting for an answer"))
 
 		return
 	}
@@ -138,23 +142,24 @@ func (s *Server) handleCancel(w http.ResponseWriter, _ *http.Request) {
 func (s *Server) handleAsk(w http.ResponseWriter, r *http.Request) {
 	var in struct {
 		Text string `json:"text"`
+		Lang string `json:"lang"` // language the question was asked in
 	}
 
 	if err := decode(w, r, maxTextRequest, &in); err != nil {
-		writeError(w, http.StatusBadRequest, err)
+		writeError(w, r, http.StatusBadRequest, err)
 
 		return
 	}
 
 	in.Text = strings.TrimSpace(in.Text)
 	if in.Text == "" {
-		writeError(w, http.StatusBadRequest, errors.New("empty question"))
+		writeError(w, r, http.StatusBadRequest, errors.New("empty question"))
 
 		return
 	}
 
 	if !s.busy.CompareAndSwap(false, true) {
-		writeError(w, http.StatusConflict, errors.New("a question is already in progress"))
+		writeError(w, r, http.StatusConflict, errors.New("a question is already in progress"))
 
 		return
 	}
@@ -162,33 +167,55 @@ func (s *Server) handleAsk(w http.ResponseWriter, r *http.Request) {
 	// Deliberately detached from the request: this work outlives it.
 	ctx := context.WithoutCancel(r.Context())
 	turn := s.session.startTurn(in.Text)
+	req := agent.Request{Text: in.Text, Language: lang.Lookup(in.Lang)}
 
-	go s.runTurn(ctx, turn, in.Text)
+	go s.runTurn(ctx, turn, req)
 
 	writeJSON(w, http.StatusAccepted, map[string]int{"turn": turn})
 }
 
-// runTurn works through one question and records how it ended.
-func (s *Server) runTurn(ctx context.Context, turn int, question string) {
-	defer s.busy.Store(false)
+// runTurn works through one question and records how it ended. Whatever
+// happens, the turn ends with an entry on the stream: a page left waiting on
+// silence is the one outcome the UI cannot explain.
+func (s *Server) runTurn(ctx context.Context, turn int, req agent.Request) {
+	started := time.Now()
 
-	answer, err := s.agent.Ask(ctx, question, &turnHandler{turn: turn, log: s.session, desk: s.prompts})
+	defer s.busy.Store(false)
+	defer s.recoverTurn(turn)
+
+	slog.Debug("turn started", "turn", turn, "lang", req.Language.Code)
+
+	answer, err := s.agent.Ask(ctx, req, &turnHandler{turn: turn, log: s.session, desk: s.prompts})
+
+	slog.Debug("turn finished", "turn", turn, "ms", time.Since(started).Milliseconds(), "error", err)
 
 	switch {
 	case errors.Is(err, agent.ErrCancelled), errors.Is(err, context.Canceled):
-		s.session.add(turn, kindError, map[string]string{"message": "cancelled", "code": "cancelled"})
+		s.session.add(turn, kindError, map[string]string{keyMessage: "cancelled", "code": "cancelled"})
 	case err != nil:
-		slog.Error("ask failed", "error", err)
-		s.session.add(turn, kindError, map[string]string{"message": err.Error()})
+		slog.Error("ask failed", "turn", turn, "error", err)
+		s.session.add(turn, kindError, map[string]string{keyMessage: err.Error()})
 	default:
 		s.session.add(turn, kindResult, answer)
 	}
 }
 
-func (s *Server) handleGetSettings(w http.ResponseWriter, _ *http.Request) {
+// recoverTurn turns a panic in the agent into a visible failure instead of a
+// dead process and a page that waits for ever.
+func (s *Server) recoverTurn(turn int) {
+	p := recover()
+	if p == nil {
+		return
+	}
+
+	slog.Error("turn panicked", "turn", turn, "panic", p, "stack", string(debug.Stack()))
+	s.session.add(turn, kindError, map[string]string{keyMessage: fmt.Sprintf("the agent crashed: %v", p)})
+}
+
+func (s *Server) handleGetSettings(w http.ResponseWriter, r *http.Request) {
 	doc, err := s.settings.Load()
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err)
+		writeError(w, r, http.StatusInternalServerError, err)
 
 		return
 	}
@@ -200,13 +227,13 @@ func (s *Server) handleGetSettings(w http.ResponseWriter, _ *http.Request) {
 func (s *Server) handlePutSettings(w http.ResponseWriter, r *http.Request) {
 	doc, err := io.ReadAll(http.MaxBytesReader(w, r.Body, maxSettingsRequest))
 	if err != nil {
-		writeError(w, http.StatusBadRequest, err)
+		writeError(w, r, http.StatusBadRequest, err)
 
 		return
 	}
 
 	if err := s.settings.Save(doc); err != nil {
-		writeError(w, http.StatusBadRequest, err)
+		writeError(w, r, http.StatusBadRequest, err)
 
 		return
 	}

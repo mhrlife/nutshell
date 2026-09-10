@@ -2,8 +2,9 @@
 
 # nutshell
 
-Talk to a coding agent instead of typing at it, and get the answer *in a
-nutshell*: a few spoken sentences, with the full write-up one click away.
+Talk to a coding agent instead of typing at it — a question, a task, a piece
+of research — and get the reply *in a nutshell*: a few spoken sentences, with
+the full write-up one click away.
 
 nutshell starts a coding agent (Claude Code today) in the current directory,
 opens a small web UI on a random local port, and wires it to speech-to-text
@@ -57,7 +58,7 @@ You need the agent's CLI on your `PATH` (`claude`) and an OpenRouter key:
 export OPENROUTER_API_KEY=sk-or-...
 ```
 
-Without a key the UI still works with typed questions; voice is switched off.
+Without a key the UI still works with typed messages; voice is switched off.
 
 ## Run
 
@@ -89,20 +90,39 @@ nutshell's own flags:
 | `--tts-model` | `google/gemini-3.1-flash-tts-preview` | Text-to-speech model |
 | `--tts-voice` | `Sadaltager` | Voice for the speech model |
 | `--tts-prompt` | `lecture` | Delivery instructions placed before the spoken text: the built-in calm lecture style, `none`, or literal text |
+| `--debug` | | Log every API call, turn and OpenRouter request (`--verbose` stays the agent's own flag) |
+
+### When something goes wrong
+
+Failures are never silent. The status line above the conversation says what
+broke, and the same line — plus the raw error behind it — is printed by the
+terminal running nutshell, including failures that happen in the browser:
+
+```
+level=ERROR msg=browser event=transcribe message="could not transcribe: openrouter 429 …"
+level=ERROR msg="request failed" method=POST path=/api/transcribe status=502 error="…"
+```
+
+Run with `--debug` to also see every API call, how long each turn took, and
+every request to OpenRouter.
 
 ## Using it
 
-The window has two panes. The rail holds the conversation: each question,
-its short spoken answer, a play button and what the message cost. The
-document pane shows the full Markdown answer of the selected message. Click
-any earlier message to bring its full answer back.
+The window has two panes. The rail holds the conversation: each message you
+send, its short spoken reply, a play button and what the message cost. The
+document pane shows the full Markdown reply of the selected message. Click
+any earlier message to bring its full text back.
 
 - The **microphone button** (or **Space**) starts recording; press it again to
   send. Esc cancels. You can also type in the field next to it and press Enter.
 - The **gear** opens settings:
-  - **Language** picks the UI language. English and Persian ship; add a
-    language by dropping a file into `internal/web/static/lang/` and listing
-    it in `index.html`, nothing else to touch.
+  - **Language** picks the language of the interface *and* of the
+    conversation: it travels with every request, so the agent is given that
+    language's writing rules, the transcriber is told what to expect from the
+    microphone, and the voice reads the answer the way that language is
+    spoken. English and Persian ship; add a language by dropping a file into
+    `internal/web/static/lang/`, listing it in `index.html`, and adding an
+    entry with the same code to `internal/lang/` for the model-facing rules.
   - **Send as I speak** (on by default): the transcript goes straight to the
     agent. Off: the text lands in the field first so you can edit it.
   - **Read answers aloud** (on by default): every answer is spoken as it
@@ -126,18 +146,18 @@ on earlier ones. nutshell runs the agent in `auto` permission mode — the same
 mode an interactive session gets — so routine commands do not stop the turn.
 Pass `--permission-mode` yourself (`plan`, `acceptEdits`, ...) to override it.
 
-## How the answer is shaped
+## How a reply is shaped
 
 The agent is told to end every reply with:
 
 ```
-<summary>one to three spoken sentences answering only the question</summary>
-<full>the complete answer in Markdown</full>
+<summary>one to three spoken sentences covering only what was asked for</summary>
+<full>the complete reply in Markdown</full>
 ```
 
 The summary deliberately drops most of the detail. It is meant to be heard,
-not read, and it answers the question rather than reporting everything the
-agent found along the way. The full answer keeps everything.
+not read, and it covers what was asked for rather than reporting everything
+the agent did along the way. The full text keeps everything.
 
 ## Adding another agent
 

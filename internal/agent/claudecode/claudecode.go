@@ -12,12 +12,14 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"os/exec"
 	"slices"
 	"strings"
 	"sync"
 
 	"github.com/mhrlife/nutshell/internal/agent"
+	"github.com/mhrlife/nutshell/internal/lang"
 )
 
 const (
@@ -35,6 +37,7 @@ type Agent struct {
 
 	mu        sync.Mutex // guards the fields below
 	proc      *process
+	lang      lang.Language // the language proc's system prompt was built for
 	sessionID string
 	cancelled bool
 	costBase  float64                       // cumulative cost already attributed to earlier turns of this process
@@ -113,17 +116,17 @@ func (a *Agent) stopLocked() {
 }
 
 // Ask implements agent.Agent.
-func (a *Agent) Ask(ctx context.Context, question string, h agent.Handler) (agent.Answer, error) {
+func (a *Agent) Ask(ctx context.Context, req agent.Request, h agent.Handler) (agent.Answer, error) {
 	a.turn.Lock()
 	defer a.turn.Unlock()
 	defer a.withdrawAllPrompts()
 
-	proc, err := a.ensureProcess()
+	proc, err := a.ensureProcess(req.Language)
 	if err != nil {
 		return agent.Answer{}, err
 	}
 
-	if err := proc.send(userMessage(question)); err != nil {
+	if err := proc.send(userMessage(req.Text)); err != nil {
 		a.mu.Lock()
 		a.stopLocked()
 		a.mu.Unlock()
@@ -134,9 +137,21 @@ func (a *Agent) Ask(ctx context.Context, question string, h agent.Handler) (agen
 	return a.awaitResult(ctx, proc, h)
 }
 
-func (a *Agent) ensureProcess() (*process, error) {
+// ensureProcess returns the running process, starting one when there is none
+// and replacing one started for another language. The language rules reach
+// claude through --append-system-prompt, which is only read at startup, so
+// switching language means a new process; the conversation survives it
+// because the new one resumes the same session.
+func (a *Agent) ensureProcess(l lang.Language) (*process, error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
+
+	if a.proc != nil && a.lang.Code != l.Code {
+		slog.Debug("language changed, restarting claude", "from", a.lang.Code, "to", l.Code)
+		a.stopLocked()
+	}
+
+	a.lang = l
 
 	if a.proc == nil {
 		proc, err := a.startLocked()
@@ -184,7 +199,7 @@ func (a *Agent) startLocked() (*process, error) {
 		"--input-format", "stream-json",
 		"--output-format", "stream-json",
 		"--verbose",
-		"--append-system-prompt", agent.AnswerPrompt,
+		"--append-system-prompt", agent.AnswerPrompt(a.lang),
 		// Route permission requests and questions to us over stdio instead
 		// of letting claude deny them for want of anyone to ask.
 		"--permission-prompt-tool", "stdio",

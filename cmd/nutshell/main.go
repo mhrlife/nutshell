@@ -54,12 +54,14 @@ func main() {
 }
 
 func run() error {
-	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stderr, nil)))
+	slog.SetDefault(newLogger(false))
 
 	opts, err := cli.Parse(os.Args[1:], os.Getenv, os.Stderr)
 	if err != nil {
 		return err
 	}
+
+	slog.SetDefault(newLogger(opts.Debug))
 
 	if opts.Version {
 		fmt.Fprintf(os.Stdout, "%s (%s, %s)\n", version, commit, date)
@@ -74,7 +76,7 @@ func run() error {
 	defer ag.Close() //nolint:errcheck // best-effort cleanup at exit
 
 	sp := speech.New(speech.Config{
-		APIKey: opts.APIKey, STTModel: opts.STTModel, TTSModel: opts.TTSModel, Voice: opts.TTSVoice, Prompt: speech.ResolvePrompt(opts.TTSPrompt),
+		APIKey: opts.APIKey, STTModel: opts.STTModel, TTSModel: opts.TTSModel, Voice: opts.TTSVoice, Style: speech.ResolveStyle(opts.TTSPrompt),
 	})
 	if !sp.Enabled() {
 		slog.Warn("no OpenRouter key (set OPENROUTER_API_KEY or --openrouter-key); voice is off, typing still works")
@@ -136,6 +138,18 @@ func run() error {
 	defer cancel()
 
 	return httpSrv.Shutdown(shutdownCtx)
+}
+
+// newLogger writes to stderr. With --debug it also carries the per-request,
+// per-turn and per-OpenRouter-call detail that explains a UI which looks like
+// it did nothing at all.
+func newLogger(debug bool) *slog.Logger {
+	level := slog.LevelInfo
+	if debug {
+		level = slog.LevelDebug
+	}
+
+	return slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: level}))
 }
 
 // newAgent picks the agent implementation named by the flags.

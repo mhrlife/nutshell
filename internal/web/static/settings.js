@@ -9,8 +9,10 @@ async function loadSettings(defaultLang) {
   let stored = {};
   try {
     const resp = await fetch('/api/settings');
-    if (resp.ok) stored = await resp.json();
-  } catch {
+    if (!resp.ok) throw await httpError(resp);
+    stored = await resp.json();
+  } catch (err) { // fall back to this browser's copy, but say why
+    logIssue('warn', 'settings', `loading settings failed, using the local copy: ${errText(err)}`);
     try { stored = JSON.parse(localStorage.getItem('nutshell') || '{}'); } catch { stored = {}; }
   }
   Object.assign(settings, DEFAULT_SETTINGS, stored);
@@ -26,7 +28,9 @@ function saveSettings() {
   saveTimer = setTimeout(() => {
     fetch('/api/settings', {
       method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(settings),
-    }).catch(() => {});
+    }).then((resp) => {
+      if (!resp.ok) logIssue('warn', 'settings', `saving settings failed with HTTP ${resp.status}`);
+    }).catch((err) => logIssue('warn', 'settings', `saving settings failed: ${errText(err)}`));
   }, 150);
 }
 

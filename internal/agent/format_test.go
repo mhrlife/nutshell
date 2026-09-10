@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/mhrlife/nutshell/internal/agent"
+	"github.com/mhrlife/nutshell/internal/lang"
 )
 
 func TestParseAnswer(t *testing.T) {
@@ -62,17 +63,31 @@ func TestParseAnswer(t *testing.T) {
 	}
 }
 
-// TestAnswerPromptHalfSpaces guards the escape the template is written with:
-// the agent must receive real half-spaces, not the text \u200c, or the Persian
-// examples in the prompt spell words that do not exist.
-func TestAnswerPromptHalfSpaces(t *testing.T) {
+// The prompt must carry the rules of the language in front of it and no
+// other: the register rules only work when they are not competing with a
+// second language's.
+func TestAnswerPromptCarriesOneLanguage(t *testing.T) {
 	t.Parallel()
 
-	if strings.Contains(agent.AnswerPrompt, `\u200c`) {
-		t.Error("AnswerPrompt still carries the unreplaced escape text")
+	persian := agent.AnswerPrompt(lang.Lookup("fa"))
+	if !strings.Contains(persian, "Persian (Farsi)") || !strings.Contains(persian, "محاوره") {
+		t.Errorf("the Persian prompt lost its register rules:\n%s", persian)
 	}
 
-	if !strings.Contains(agent.AnswerPrompt, "\u200c") {
-		t.Error("AnswerPrompt has no half-space, so its Persian examples are misspelled")
+	english := agent.AnswerPrompt(lang.Lookup("en"))
+	if strings.Contains(english, "محاوره") {
+		t.Errorf("the English prompt carries the Persian rules:\n%s", english)
+	}
+
+	unknown := agent.AnswerPrompt(lang.Lookup("xx"))
+	if !strings.Contains(unknown, "the language the user spoke") {
+		t.Errorf("a language without rules lost its fallback:\n%s", unknown)
+	}
+
+	// Whatever the language, the reply format is the point of the prompt.
+	for _, got := range []string{persian, english, unknown} {
+		if !strings.Contains(got, "<summary>") || !strings.Contains(got, "<full>") {
+			t.Errorf("prompt lost the answer format:\n%s", got)
+		}
 	}
 }

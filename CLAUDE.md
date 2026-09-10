@@ -9,6 +9,9 @@ the same interface). Go, standard library only; the browser UI is embedded.
 - `internal/agent` – the `Agent` interface plus the shared answer format
   (`AnswerPrompt`, `ParseAnswer`). New agents go in `internal/agent/<name>`.
 - `internal/agent/claudecode` – Claude Code implementation.
+- `internal/lang` – per-language rules for the agent, the transcriber and the
+  voice. The browser sends its language code with every request; prompts are
+  built from the entry for that code, never from all of them at once.
 - `internal/speech` – OpenRouter speech-to-text and text-to-speech.
 - `internal/server` – HTTP + server-sent-events API used by the UI.
 - `internal/web/static` – the UI (plain HTML/CSS/JS, no build step).
