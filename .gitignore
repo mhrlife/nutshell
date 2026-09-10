@@ -1,0 +1,6 @@
+/nutshell
+/dist/
+*.log
+# browser test artifacts
+/.playwright-mcp/
+/*.png

@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>nutshell</title>
+<link rel="icon" type="image/svg+xml" href="logo.svg">
+<link rel="icon" type="image/png" sizes="32x32" href="favicon.png">
+<link rel="icon" type="image/png" sizes="192x192" href="favicon-192.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="stylesheet" href="fonts/fonts.css">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<aside class="rail">
+  <header class="rail-head">
+    <img class="mark" src="logo.svg" alt="" width="48" height="48">
+    <div class="titles">
+      <div class="brand" id="brand"></div>
+      <div class="status"><span id="status"></span><span id="session-cost" class="cost" hidden></span></div>
+    </div>
+  </header>
+
+  <div id="transcript" class="transcript">
+    <div id="empty" class="empty"><p id="empty-hint"></p></div>
+  </div>
+
+  <footer class="rail-foot" id="foot" data-state="idle">
+    <div class="foot-row">
+      <button id="talk" class="mic" type="button"></button>
+      <textarea id="input" rows="1" spellcheck="false"></textarea>
+      <button id="settings-btn" class="icon-btn" type="button"></button>
+      <div class="thinking" aria-hidden="true"><i></i><i></i><i></i></div>
+    </div>
+    <p id="foot-note" class="foot-note" hidden></p>
+  </footer>
+</aside>
+
+<main class="doc" id="doc">
+  <div class="doc-head">
+    <span class="doc-tools">
+      <span id="doc-cost" class="cost" hidden></span>
+      <button id="copy" class="icon-btn" type="button"></button>
+      <button id="doc-close" class="icon-btn narrow-only" type="button"></button>
+    </span>
+  </div>
+  <article id="doc-body" class="md" dir="auto" hidden></article>
+  <div id="doc-empty" class="doc-empty">
+    <img class="mark" src="logo.svg" alt="" width="88" height="88">
+    <p></p>
+  </div>
+</main>
+
+<div id="settings" class="sheet" hidden></div>
+<div id="prompt" class="modal" hidden></div>
+
+<template id="turn-template">
+  <article class="turn">
+    <div class="q" dir="auto"></div>
+    <div class="activity" hidden></div>
+    <div class="summary" dir="auto" hidden></div>
+    <div class="meta" hidden>
+      <button class="speak icon-btn" type="button"></button>
+      <button class="open-full narrow-only" type="button"></button>
+      <span class="cost" hidden></span>
+    </div>
+    <div class="error" dir="auto" hidden></div>
+  </article>
+</template>
+
+<script src="vendor/marked.min.js"></script>
+<script src="i18n.js"></script>
+<script src="lang/en.js"></script>
+<script src="lang/fa.js"></script>
+<script src="settings.js"></script>
+<script src="prompt.js"></script>
+<script src="audio.js"></script>
+<script src="cost.js"></script>
+<script src="session.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

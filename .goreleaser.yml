@@ -1,0 +1,82 @@
+# GoReleaser builds every published target, names the archives, writes the
+# checksum file and creates the GitHub Release. Nothing links against libc and
+# the UI is embedded, so one Linux runner cross-compiles the whole matrix.
+#
+#   goreleaser check                     # validate this file
+#   goreleaser build --snapshot --clean  # build every target locally
+version: 2
+
+project_name: nutshell
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: nutshell
+    main: ./cmd/nutshell
+    binary: nutshell
+    env:
+      - CGO_ENABLED=0
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w
+      # .Tag, not .Version: the installers compare `nutshell --version` against
+      # the release tag, so the leading v has to be there.
+      - -X main.version={{ .Tag }}
+      - -X main.commit={{ .ShortCommit }}
+      - -X main.date={{ .CommitDate }}
+    goos: [linux, darwin, windows]
+    goarch: [amd64, arm64]
+    mod_timestamp: '{{ .CommitTimestamp }}'
+
+archives:
+  # The name is what install.sh reconstructs from `uname`, so keep it in step
+  # with the os/arch mapping there.
+  - id: nutshell
+    name_template: '{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}'
+    formats: [tar.gz]
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+    files:
+      - README.md
+
+checksum:
+  name_template: checksums.txt
+
+snapshot:
+  version_template: '{{ incpatch .Version }}-snapshot'
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - '^docs:'
+      - '^test:'
+      - '^ci:'
+      - '^chore:'
+      - '^style:'
+
+release:
+  # The installers ride along with every release, so
+  # releases/latest/download/install.sh is always a valid URL and does not
+  # depend on a branch name.
+  extra_files:
+    - glob: install.sh
+    - glob: install.ps1
+  footer: |
+    ## Install
+
+    Linux and macOS:
+
+    ```sh
+    curl -fsSL https://github.com/mhrlife/nutshell/releases/latest/download/install.sh | bash
+    ```
+
+    Windows:
+
+    ```powershell
+    irm https://github.com/mhrlife/nutshell/releases/latest/download/install.ps1 | iex
+    ```

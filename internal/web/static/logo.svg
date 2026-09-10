@@ -1,0 +1,50 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+  <title id="title">Voice Code Logo</title>
+  <desc id="desc">Transparent logo with a white speech bubble, a dark terminal prompt with a subtle smile, and a three-line voice icon.</desc>
+
+  <!-- Transparent canvas -->
+
+  <!-- Speech bubble -->
+  <path
+    d="M256 42
+       C139 42 62 115 62 232
+       C62 294 84 340 111 373
+       C124 389 145 398 166 398
+       H259
+       C271 398 278 405 278 417
+       V454
+       C278 470 296 479 310 470
+       L369 432
+       C418 401 450 338 450 263
+       C450 131 366 42 256 42 Z"
+    fill="#FFFFFF"/>
+
+  <!-- Code prompt: > -->
+  <path
+    d="M128 190 L177 232 L128 274"
+    fill="none"
+    stroke="#1D222B"
+    stroke-width="24"
+    stroke-linecap="round"
+    stroke-linejoin="round"/>
+
+  <!-- Curved underscore / smile -->
+  <path
+    d="M196 277
+       C218 289 247 289 269 277"
+    fill="none"
+    stroke="#1D222B"
+    stroke-width="20"
+    stroke-linecap="round"/>
+
+  <!-- Voice icon: 3 rounded lines, balanced to read more like an eye -->
+  <g
+    fill="none"
+    stroke="#A87252"
+    stroke-width="20"
+    stroke-linecap="round">
+    <path d="M326 218 V250"/>
+    <path d="M357 195 V273"/>
+    <path d="M388 218 V250"/>
+  </g>
+</svg>
