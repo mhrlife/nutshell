@@ -56,7 +56,7 @@ func Parse(args []string, getenv func(string) string, out io.Writer) (Options, e
 	fs.StringVar(&o.STTModel, "stt-model", "google/gemini-3.8-flash", "OpenRouter chat model with audio input that transcribes speech")
 	fs.StringVar(&o.SummaryModel, "summary-model", "google/gemini-3.8-flash", "OpenRouter model that summarizes a selected passage before it is spoken")
 	fs.StringVar(&o.TTSModel, "tts-model", "x-ai/grok-voice-tts-1.0", "OpenRouter text-to-speech model that speaks answers")
-	fs.StringVar(&o.TTSVoice, "tts-voice", "rex", "voice for the speech model (x-ai/grok-voice-tts-1.0: eve, ara, rex, sal, leo)")
+	fs.StringVar(&o.TTSVoice, "tts-voice", "leo", "voice for the speech model (x-ai/grok-voice-tts-1.0: eve, ara, rex, sal, leo)")
 	fs.Float64Var(&o.TTSSpeed, "tts-speed", 1.2, "how fast the voice talks, 1 being the model's own pace (x-ai/grok-voice-tts-1.0: 0.7 to 1.5)")
 	fs.StringVar(&o.TTSPrompt, "tts-prompt", "none", "delivery instructions placed before the spoken text, for voices that follow them (Gemini TTS does, Grok reads them aloud): \"none\" (send the text bare, without even the language note), \"lecture\" (built-in calm lecture style), or literal text")
 	fs.Usage = func() {
