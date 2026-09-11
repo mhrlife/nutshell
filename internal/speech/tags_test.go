@@ -36,23 +36,23 @@ func TestStripSpeechTags(t *testing.T) {
 
 // Every tag the voice performs has to reach the model spelled the way the
 // voice expects it, or the model invents tags that get read out.
-func TestTagsPrompt(t *testing.T) {
+func TestTagInstructions(t *testing.T) {
 	t.Parallel()
 
-	prompt := TagsPrompt()
+	instructions := tagInstructions()
 
 	for _, g := range inlineTags {
 		for _, tag := range g.tags {
-			if !strings.Contains(prompt, "["+tag+"]") {
-				t.Errorf("prompt is missing [%s]", tag)
+			if !strings.Contains(instructions, "["+tag+"]") {
+				t.Errorf("instructions are missing [%s]", tag)
 			}
 		}
 	}
 
 	for _, g := range wrappingTags {
 		for _, tag := range g.tags {
-			if !strings.Contains(prompt, "<"+tag+">…</"+tag+">") {
-				t.Errorf("prompt is missing <%s>", tag)
+			if !strings.Contains(instructions, "<"+tag+">…</"+tag+">") {
+				t.Errorf("instructions are missing <%s>", tag)
 			}
 		}
 	}

@@ -11,6 +11,7 @@
 <link rel="stylesheet" href="fonts/fonts.css">
 <link rel="stylesheet" href="style.css">
 <link rel="stylesheet" href="narrator.css">
+<link rel="stylesheet" href="transcribe.css">
 </head>
 <body>
 <aside class="rail">
@@ -27,6 +28,13 @@
   </div>
 
   <footer class="rail-foot" id="foot" data-state="idle">
+    <div id="unsent" class="unsent" role="alert" hidden>
+      <p class="unsent-text" dir="auto"></p>
+      <div class="unsent-actions">
+        <button class="unsent-retry" type="button"></button>
+        <button class="unsent-discard" type="button"></button>
+      </div>
+    </div>
     <div id="quote" class="quote" hidden>
       <span class="quote-text"></span>
       <button class="quote-clear icon-btn" type="button"></button>
@@ -126,6 +134,7 @@
 <script src="clips.js"></script>
 <script src="speakable.js"></script>
 <script src="narrator.js"></script>
+<script src="transcribe.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

@@ -4,12 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"net/url"
 	"time"
 )
 
 const (
-	generationURL      = "https://openrouter.ai/api/v1/generation"
+	generationPath     = "/generation"
 	generationAttempts = 10
 	generationBackoff  = 750 * time.Millisecond
 )
@@ -41,7 +42,7 @@ func (c *Client) GenerationCost(ctx context.Context, id string) (float64, error)
 }
 
 func (c *Client) fetchGenerationCost(ctx context.Context, id string) (float64, error) {
-	resp, err := c.do(ctx, "GET", generationURL+"?id="+url.QueryEscape(id), nil)
+	resp, err := c.do(ctx, http.MethodGet, c.baseURL+generationPath+"?id="+url.QueryEscape(id), nil)
 	if err != nil {
 		return 0, err
 	}

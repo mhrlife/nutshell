@@ -2,6 +2,7 @@ package claudecode
 
 import (
 	"encoding/json"
+	"log/slog"
 	"strings"
 	"testing"
 
@@ -89,7 +90,7 @@ func TestHandleEventResult(t *testing.T) {
 func TestChargeTurnUsesDeltas(t *testing.T) {
 	t.Parallel()
 
-	a := New("claude", nil)
+	a := New("claude", nil, slog.New(slog.DiscardHandler))
 
 	first := agent.Answer{CostUSD: 0.010, CostKnown: true}
 	a.chargeTurn(&first)

@@ -1,0 +1,30 @@
+/* a recording whose transcription failed, kept in the footer until it is sent again or thrown away */
+.unsent {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 10px 12px;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-inline-start: 3px solid var(--danger);
+  border-radius: 10px;
+}
+
+/* only while nothing else is going on in the footer */
+.rail-foot:not([data-state="idle"]) .unsent { display: none; }
+
+.unsent-text { margin: 0; font-size: 13px; line-height: 1.6; color: var(--ink-2); }
+
+.unsent-text:dir(rtl) { font-family: var(--fa); }
+
+.unsent-actions { display: flex; gap: 8px; }
+
+.unsent-actions button { height: 30px; padding: 0 14px; border-radius: 15px; font-size: 13px; }
+
+.unsent-retry { background: var(--ink); color: var(--rail); }
+
+.unsent-retry:hover { background: var(--ink-2); }
+
+.unsent-discard { background: transparent; color: var(--muted); }
+
+.unsent-discard:hover { background: rgba(42, 38, 34, 0.06); color: var(--ink-2); }

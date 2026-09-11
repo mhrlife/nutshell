@@ -95,6 +95,13 @@ linters:
     nolintlint:
       require-explanation: true
       require-specific: true
+    sloglint:
+      # Log through the *slog.Logger a constructor was handed, never the slog
+      # package functions, and pass the context whenever one is in scope.
+      no-global: all
+      context: scope
+      static-msg: true
+      key-naming-case: snake
     wsl_v5:
       allow-first-in-block: true
       allow-whole-block: false

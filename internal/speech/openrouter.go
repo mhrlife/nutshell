@@ -3,6 +3,7 @@ package speech
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
@@ -17,8 +18,9 @@ import (
 )
 
 const (
-	chatURL   = "https://openrouter.ai/api/v1/chat/completions"
-	speechURL = "https://openrouter.ai/api/v1/audio/speech"
+	baseURL    = "https://openrouter.ai/api/v1"
+	chatPath   = "/chat/completions"
+	speechPath = "/audio/speech"
 
 	requestTimeout = 3 * time.Minute
 	maxErrorBody   = 4 << 10
@@ -57,13 +59,19 @@ type Config struct {
 
 // Client talks to OpenRouter. The zero value is disabled.
 type Client struct {
-	cfg  Config
-	http *http.Client
+	cfg        Config
+	http       *http.Client
+	logger     *slog.Logger
+	baseURL    string        // OpenRouter's API root; tests point it at a fake
+	retryDelay time.Duration // the wait before the first retry
 }
 
-// New returns a client for cfg.
-func New(cfg Config) *Client {
-	return &Client{cfg: cfg, http: &http.Client{Timeout: requestTimeout}}
+// New returns a client for cfg that logs to logger.
+func New(cfg Config, logger *slog.Logger) *Client {
+	return &Client{
+		cfg: cfg, http: &http.Client{Timeout: requestTimeout}, logger: logger,
+		baseURL: baseURL, retryDelay: retryDelay,
+	}
 }
 
 // Enabled reports whether an API key is configured.
@@ -78,7 +86,7 @@ func (c *Client) Transcribe(ctx context.Context, audioB64, format string, l lang
 		map[string]any{
 			"role": "user",
 			"content": []any{
-				map[string]any{"type": "text", "text": TranscribeInstruction(l)},
+				map[string]any{"type": "text", "text": TranscribeInstructions(l)},
 				map[string]any{
 					"type":        "input_audio",
 					"input_audio": map[string]string{"data": audioB64, "format": format},
@@ -95,8 +103,27 @@ func (c *Client) Transcribe(ctx context.Context, audioB64, format string, l lang
 	return Transcript{Text: text, CostUSD: cost}, nil
 }
 
-// chat sends one chat completion and returns the reply with what it cost.
+// chat sends one chat completion, trying again after a transient failure,
+// and returns the reply with what it cost.
 func (c *Client) chat(ctx context.Context, model string, messages []any) (string, float64, error) {
+	var (
+		reply string
+		cost  float64
+	)
+
+	err := c.retry(ctx, model, func() error {
+		var err error
+
+		reply, cost, err = c.chatOnce(ctx, model, messages)
+
+		return err
+	})
+
+	return reply, cost, err
+}
+
+// chatOnce is a single attempt at chat.
+func (c *Client) chatOnce(ctx context.Context, model string, messages []any) (string, float64, error) {
 	body := map[string]any{
 		"model":       model,
 		"messages":    messages,
@@ -104,7 +131,7 @@ func (c *Client) chat(ctx context.Context, model string, messages []any) (string
 		"usage":       map[string]bool{"include": true},
 	}
 
-	resp, err := c.post(ctx, chatURL, body)
+	resp, err := c.post(ctx, c.baseURL+chatPath, body)
 	if err != nil {
 		return "", 0, err
 	}
@@ -119,10 +146,20 @@ func (c *Client) chat(ctx context.Context, model string, messages []any) (string
 		Usage struct {
 			Cost float64 `json:"cost"`
 		} `json:"usage"`
+		// Error is how OpenRouter reports a provider that failed after the
+		// reply had already gone out as 200.
+		Error *struct {
+			Code    int    `json:"code"`
+			Message string `json:"message"`
+		} `json:"error"`
 	}
 
 	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
 		return "", 0, fmt.Errorf("decoding reply: %w", err)
+	}
+
+	if out.Error != nil {
+		return "", 0, &StatusError{Code: cmp.Or(out.Error.Code, http.StatusBadGateway), Message: out.Error.Message}
 	}
 
 	if len(out.Choices) == 0 {
@@ -132,11 +169,26 @@ func (c *Client) chat(ctx context.Context, model string, messages []any) (string
 	return strings.TrimSpace(out.Choices[0].Message.Content), out.Usage.Cost, nil
 }
 
-// Speak converts text to a WAV clip. l is the language the text is written
-// in, so the voice reads it the way that language is spoken rather than
-// sounding out foreign words.
+// Speak converts text to a WAV clip, trying again after a transient failure.
+// l is the language the text is written in, so the voice reads it the way
+// that language is spoken rather than sounding out foreign words.
 func (c *Client) Speak(ctx context.Context, text string, l lang.Language) (Clip, error) {
-	resp, err := c.post(ctx, speechURL, c.speechRequest(c.speechInput(text, l)))
+	var clip Clip
+
+	err := c.retry(ctx, c.cfg.TTSModel, func() error {
+		var err error
+
+		clip, err = c.speakOnce(ctx, c.speechRequest(c.speechInput(text, l)))
+
+		return err
+	})
+
+	return clip, err
+}
+
+// speakOnce is a single attempt at Speak.
+func (c *Client) speakOnce(ctx context.Context, body map[string]any) (Clip, error) {
+	resp, err := c.post(ctx, c.baseURL+speechPath, body)
 	if err != nil {
 		return Clip{}, err
 	}
@@ -168,7 +220,7 @@ func (c *Client) speechInput(text string, l lang.Language) string {
 		text = stripSpeechTags(text)
 	}
 
-	return SpeakInstruction(c.cfg.Style, l) + text
+	return SpeakInstructions(c.cfg.Style, l) + text
 }
 
 // speechRequest is the /audio/speech body that reads input aloud.
@@ -223,14 +275,15 @@ func (c *Client) do(ctx context.Context, method, url string, body io.Reader) (*h
 		return nil, fmt.Errorf("calling openrouter: %w", err)
 	}
 
-	slog.Debug("openrouter", "url", url, "status", resp.Status, "ms", time.Since(started).Milliseconds())
+	c.logger.DebugContext(ctx, "openrouter",
+		"url", url, "status", resp.Status, "ms", time.Since(started).Milliseconds())
 
 	if resp.StatusCode/100 != 2 {
 		defer resp.Body.Close()
 
 		msg, _ := io.ReadAll(io.LimitReader(resp.Body, maxErrorBody))
 
-		return nil, fmt.Errorf("openrouter %s: %s", resp.Status, strings.TrimSpace(string(msg)))
+		return nil, &StatusError{Code: resp.StatusCode, Message: strings.TrimSpace(string(msg))}
 	}
 
 	return resp, nil

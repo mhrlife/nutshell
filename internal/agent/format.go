@@ -7,19 +7,20 @@ import (
 	"github.com/mhrlife/nutshell/internal/lang"
 )
 
-// AnswerPrompt returns the instructions added to the agent's system prompt so
+// Instructions returns what nutshell adds to the agent's system prompt so
 // every final reply carries a short spoken summary and a full Markdown
 // answer, written the way l is spoken. Only the rules of the language in
 // front of us go in: an agent asked to keep the register of every language
 // nutshell knows keeps none of them well. Implementations pass the result to
 // their agent in whatever way that agent accepts extra instructions.
-func AnswerPrompt(l lang.Language) string {
+func Instructions(l lang.Language) string {
 	return answerFormat + "\n\n" + languageRules(l) + "\n\n" + answerScope + "\n\n" + selectionNote
 }
 
-// languageRules is the part of the prompt that changes with the language: the
-// one the user picked in the browser, or, for a language nutshell has no
-// rules for, wording that commits to nothing beyond following the user.
+// languageRules is the part of the instructions that changes with the
+// language: the one the user picked in the browser, or, for a language
+// nutshell has no rules for, wording that commits to nothing beyond following
+// the user.
 func languageRules(l lang.Language) string {
 	if !l.Known() {
 		return `Both parts must be written in the language the user spoke. Never translate the user's language.
@@ -59,7 +60,7 @@ var (
 	tagRe     = regexp.MustCompile(`</?(summary|full)>`)
 )
 
-// ParseAnswer splits a reply written in the AnswerPrompt format. A reply
+// ParseAnswer splits a reply written in the format Instructions asks for. A reply
 // without the tags becomes both the full answer and the summary, so a
 // misbehaving agent still produces something the UI can show.
 func ParseAnswer(raw string) Answer {

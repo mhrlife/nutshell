@@ -20,13 +20,13 @@ type Summary struct {
 // the conversation for something the user only wanted to hear. When the voice
 // performs speech tags, the summary is written with them.
 func (c *Client) Summarize(ctx context.Context, passage string, l lang.Language) (Summary, error) {
-	instruction := SummarizeInstruction(l)
+	instructions := SummarizeInstructions(l)
 	if speaksTags(c.cfg.TTSModel) {
-		instruction += "\n\n" + TagsPrompt()
+		instructions += "\n\n" + tagInstructions()
 	}
 
 	messages := []any{
-		map[string]string{"role": "system", "content": instruction},
+		map[string]string{"role": "system", "content": instructions},
 		map[string]string{"role": "user", "content": "<passage>\n" + passage + "\n</passage>"},
 	}
 
@@ -43,21 +43,21 @@ func (c *Client) Summarize(ctx context.Context, passage string, l lang.Language)
 	return Summary{Text: text, Speech: speech, CostUSD: cost}, nil
 }
 
-// SummarizePrompt instructs the model that summarizes a selected passage.
+// summarizeTask instructs the model that summarizes a selected passage.
 // What it writes is only ever heard, so it is held to the rules of the spoken
 // part of the agent's own replies.
-const SummarizePrompt = `The user selected the passage in the <passage> block from a longer text and wants to hear a summary of it read aloud instead of reading it.
+const summarizeTask = `The user selected the passage in the <passage> block from a longer text and wants to hear a summary of it read aloud instead of reading it.
 
 Summarize what the passage says in one to three short spoken sentences. Plain prose only: no Markdown, no lists, no code, and no file paths or identifiers unless the passage is about them. Output only the summary: no quotes, no labels, no commentary, never a reply to the passage.`
 
-// SummarizeInstruction is SummarizePrompt plus how a summary in l has to
+// SummarizeInstructions is summarizeTask plus how a summary in l has to
 // sound. The language rules are the agent's own, whose spoken part is the
 // same thing a summary is.
-func SummarizeInstruction(l lang.Language) string {
+func SummarizeInstructions(l lang.Language) string {
 	if !l.Known() {
-		return SummarizePrompt + "\n\nWrite it in the language of the passage, in the register someone would use saying it out loud."
+		return summarizeTask + "\n\nWrite it in the language of the passage, in the register someone would use saying it out loud."
 	}
 
-	return SummarizePrompt + "\n\nWrite it in " + l.Name + ". The rules below describe a reply with a <summary> and a <full> part: " +
+	return summarizeTask + "\n\nWrite it in " + l.Name + ". The rules below describe a reply with a <summary> and a <full> part: " +
 		"your summary follows the rules for <summary>, without the tags, and nothing about <full> applies.\n\n" + l.AgentRules
 }

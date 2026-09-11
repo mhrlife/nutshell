@@ -194,6 +194,22 @@ func TestTranscribeAndSpeak(t *testing.T) {
 	}
 }
 
+// Once OpenRouter has failed every retry, the page is told it was the
+// connection, so it keeps the recording and offers to send it again.
+func TestTranscribeReportsAnUnreachableProvider(t *testing.T) {
+	t.Parallel()
+
+	ts := newTestServer(&fakeAgent{})
+	defer ts.Close()
+
+	resp := post(t, ts.URL+"/api/transcribe", `{"audio":"unavailable","format":"wav"}`)
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusServiceUnavailable {
+		t.Errorf("status = %d, want %d", resp.StatusCode, http.StatusServiceUnavailable)
+	}
+}
+
 func TestSettingsRoundTrip(t *testing.T) {
 	t.Parallel()
 

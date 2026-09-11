@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -76,8 +77,13 @@ type fakeSpeech struct{ enabled bool }
 func (f fakeSpeech) Enabled() bool { return f.enabled }
 
 // Transcribe and Speak echo the language they were handed, which is how the
-// tests see that the browser's choice travelled the whole way.
-func (f fakeSpeech) Transcribe(_ context.Context, _, _ string, l lang.Language) (speech.Transcript, error) {
+// tests see that the browser's choice travelled the whole way. Audio that
+// reads "unavailable" fails the way OpenRouter does once every retry is spent.
+func (f fakeSpeech) Transcribe(_ context.Context, audio, _ string, l lang.Language) (speech.Transcript, error) {
+	if audio == "unavailable" {
+		return speech.Transcript{}, speech.ErrUnavailable
+	}
+
 	return speech.Transcript{Text: "hello " + l.Code, CostUSD: 0.0002}, nil
 }
 
@@ -99,11 +105,17 @@ func (f fakeSpeech) GenerationCost(_ context.Context, id string) (float64, error
 	return 0.001, nil
 }
 
+// newTestServer serves ag and throws its logs away.
 func newTestServer(ag agent.Agent) *httptest.Server {
-	static := http.FS(fstest.MapFS{"index.html": {Data: []byte("<h1>ui</h1>")}})
-	srv := server.New(ag, fakeSpeech{enabled: true}, &fakeSettings{}, static, server.Config{Lang: "en", Project: "demo"})
+	return newLoggedTestServer(ag, slog.New(slog.DiscardHandler))
+}
 
-	return httptest.NewServer(srv)
+// newLoggedTestServer serves ag and logs to logger.
+func newLoggedTestServer(ag agent.Agent, logger *slog.Logger) *httptest.Server {
+	static := http.FS(fstest.MapFS{"index.html": {Data: []byte("<h1>ui</h1>")}})
+	cfg := server.Config{Lang: "en", Project: "demo"}
+
+	return httptest.NewServer(server.New(ag, fakeSpeech{enabled: true}, &fakeSettings{}, static, cfg, logger))
 }
 
 func post(t *testing.T, url, body string) *http.Response {
