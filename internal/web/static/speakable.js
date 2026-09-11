@@ -5,8 +5,10 @@
 // on a short bold phrase. /api/speak strips the tags for a voice that would
 // read them out.
 
-const NARRATION_FIRST = 400; // characters in the first segment
-const NARRATION_SEGMENT = 1400; // characters in every later one
+// Characters in a segment. Every segment is its own speech request, and the
+// voice starts afresh at each one, so a seam between them is audible: most
+// answers fit one segment, and only a longer one is split.
+const NARRATION_SEGMENT = 10000;
 const EMPHASIS_WORDS = 5; // bold text longer than this is read plainly
 
 const SPEECH_TAGS = /\[(?:pause|long-pause)\]|<\/?emphasis>/g;
@@ -81,13 +83,12 @@ function speakableBlocks(markdown) {
 function narrationSegments(blocks) {
   const texts = [];
   let current = '';
-  const limit = () => (texts.length ? NARRATION_SEGMENT : NARRATION_FIRST);
   const add = (piece) => {
-    if (current && current.length + 1 + piece.length > limit()) { texts.push(current); current = ''; }
+    if (current && current.length + 1 + piece.length > NARRATION_SEGMENT) { texts.push(current); current = ''; }
     current = current ? `${current} ${piece}` : piece;
   };
   for (const block of blocks) {
-    const sentences = block.length > limit() ? block.split(/(?<=[.!?؟…])\s+/) : [block];
+    const sentences = block.length > NARRATION_SEGMENT ? block.split(/(?<=[.!?؟…])\s+/) : [block];
     sentences.flatMap((s) => (s.length > NARRATION_SEGMENT ? byWords(s) : [s])).forEach(add);
   }
   if (current) texts.push(current);

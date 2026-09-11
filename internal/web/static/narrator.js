@@ -1,9 +1,8 @@
 // The full answer read aloud, with the controls of any audio player: play and
 // pause, ten seconds back or forward, a timeline to click or drag, and the
-// playback speed. A long answer is too much for one speech request, so it is
-// voiced in segments of a few paragraphs. The first is short, so the voice
-// starts soon, and only the next few are voiced ahead of the one playing, so
-// an answer left after a minute is not paid for in full. The timeline covers
+// playback speed. Most answers are voiced in one speech request; only one too
+// long for it is split into segments (see speakable.js), and only the next few
+// of those are voiced ahead of the one playing. The timeline covers
 // the whole answer from the start; how long the part not voiced yet will run
 // is estimated from the part that is. What is read comes from speakable.js.
 
