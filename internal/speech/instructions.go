@@ -9,12 +9,12 @@ import "github.com/mhrlife/nutshell/internal/lang"
 // word of it aloud, which is why --tts-prompt defaults to none.
 const LectureStyle = `[Professional, Fast Pace] `
 
-// SpeakInstruction returns everything put before the text to speak: how to
+// SpeakInstructions returns everything put before the text to speak: how to
 // deliver it, which language it is in and how that language sounds, then the
 // header the model expects ahead of the transcript. An empty style is the
 // user asking for no directions at all (--tts-prompt=none), and the text goes
 // out bare.
-func SpeakInstruction(style string, l lang.Language) string {
+func SpeakInstructions(style string, l lang.Language) string {
 	if style == "" {
 		return ""
 	}
@@ -26,15 +26,15 @@ func SpeakInstruction(style string, l lang.Language) string {
 	return style + "\nTranscript:\n"
 }
 
-// TranscribePrompt instructs the speech-to-text model. The code-switching
+// transcribeTask instructs the speech-to-text model. The code-switching
 // rule is what stops a Persian sentence about the AskUserQuestion tool coming
 // back as "اسک یوزر کوشن", which the agent cannot act on. A capable model
 // gets this right on its own — google/gemini-3.8-flash does, 2.5-flash did
 // not — so treat the rule as insurance for whatever --stt-model is pointed at,
 // not as the thing carrying the feature. Dedicated speech-to-text models take
-// no prompt at all, and google/chirp-3 spells exactly those words in Persian
-// letters, which is why --stt-model stays a chat model.
-const TranscribePrompt = `You are transcribing a software developer talking to a coding agent, so the
+// no instructions at all, and google/chirp-3 spells exactly those words in
+// Persian letters, which is why --stt-model stays a chat model.
+const transcribeTask = `You are transcribing a software developer talking to a coding agent, so the
 transcript has to come out machine-usable.
 
 Write it in the language it was spoken in, but never spell an English word in
@@ -48,15 +48,15 @@ script, loanwords included.
 Output only the transcript with normal punctuation: no quotes, no labels, no
 commentary. If the audio contains no speech, output nothing.`
 
-// TranscribeInstruction is TranscribePrompt plus what the language chosen in
+// TranscribeInstructions is transcribeTask plus what the language chosen in
 // the browser says to expect from the microphone. A language nutshell has no
 // hint for leaves the model to work it out for itself.
-func TranscribeInstruction(l lang.Language) string {
+func TranscribeInstructions(l lang.Language) string {
 	if l.STTHint == "" {
-		return TranscribePrompt
+		return transcribeTask
 	}
 
-	return TranscribePrompt + "\n\nThe speaker most likely speaks " + l.STTHint + "."
+	return transcribeTask + "\n\nThe speaker most likely speaks " + l.STTHint + "."
 }
 
 // Delivery styles selectable from the command line.

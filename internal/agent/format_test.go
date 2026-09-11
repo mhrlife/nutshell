@@ -63,31 +63,31 @@ func TestParseAnswer(t *testing.T) {
 	}
 }
 
-// The prompt must carry the rules of the language in front of it and no
-// other: the register rules only work when they are not competing with a
+// The instructions must carry the rules of the language in front of them and
+// no other: the register rules only work when they are not competing with a
 // second language's.
-func TestAnswerPromptCarriesOneLanguage(t *testing.T) {
+func TestInstructionsCarryOneLanguage(t *testing.T) {
 	t.Parallel()
 
-	persian := agent.AnswerPrompt(lang.Lookup("fa"))
+	persian := agent.Instructions(lang.Lookup("fa"))
 	if !strings.Contains(persian, "Persian (Farsi)") || !strings.Contains(persian, "محاوره") {
-		t.Errorf("the Persian prompt lost its register rules:\n%s", persian)
+		t.Errorf("the Persian instructions lost their register rules:\n%s", persian)
 	}
 
-	english := agent.AnswerPrompt(lang.Lookup("en"))
+	english := agent.Instructions(lang.Lookup("en"))
 	if strings.Contains(english, "محاوره") {
-		t.Errorf("the English prompt carries the Persian rules:\n%s", english)
+		t.Errorf("the English instructions carry the Persian rules:\n%s", english)
 	}
 
-	unknown := agent.AnswerPrompt(lang.Lookup("xx"))
+	unknown := agent.Instructions(lang.Lookup("xx"))
 	if !strings.Contains(unknown, "the language the user spoke") {
 		t.Errorf("a language without rules lost its fallback:\n%s", unknown)
 	}
 
-	// Whatever the language, the reply format is the point of the prompt.
+	// Whatever the language, the reply format is the point of the instructions.
 	for _, got := range []string{persian, english, unknown} {
 		if !strings.Contains(got, "<summary>") || !strings.Contains(got, "<full>") {
-			t.Errorf("prompt lost the answer format:\n%s", got)
+			t.Errorf("instructions lost the answer format:\n%s", got)
 		}
 	}
 }

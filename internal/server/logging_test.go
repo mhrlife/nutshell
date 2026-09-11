@@ -10,18 +10,12 @@ import (
 	"testing"
 )
 
-// captureLog points the default logger at a buffer for the duration of a test.
-// The tests using it do not run in parallel: they read what everyone wrote.
-func captureLog(t *testing.T) *syncBuffer {
-	t.Helper()
-
+// captureLog returns a debug logger writing to a buffer the test reads back.
+// Every test gets its own, so the tests using one still run in parallel.
+func captureLog() (*slog.Logger, *syncBuffer) {
 	buf := &syncBuffer{}
-	previous := slog.Default()
 
-	slog.SetDefault(slog.New(slog.NewTextHandler(buf, &slog.HandlerOptions{Level: slog.LevelDebug})))
-	t.Cleanup(func() { slog.SetDefault(previous) })
-
-	return buf
+	return slog.New(slog.NewTextHandler(buf, &slog.HandlerOptions{Level: slog.LevelDebug})), buf
 }
 
 type syncBuffer struct {
@@ -45,12 +39,12 @@ func (b *syncBuffer) String() string {
 
 // The browser is the half of nutshell the terminal cannot see, so it reports
 // its own failures.
-//
-//nolint:paralleltest // captures the default logger, which is process-wide
 func TestClientLogReachesTheTerminal(t *testing.T) {
-	log := captureLog(t)
+	t.Parallel()
 
-	ts := newTestServer(&fakeAgent{})
+	logger, log := captureLog()
+
+	ts := newLoggedTestServer(&fakeAgent{}, logger)
 	defer ts.Close()
 
 	resp := post(t, ts.URL+"/api/log", `{"level":"error","event":"transcribe","message":"HTTP 502","detail":"openrouter 429"}`)
@@ -69,18 +63,18 @@ func TestClientLogReachesTheTerminal(t *testing.T) {
 
 // A request that fails leaves a line behind even when nobody is watching the
 // page it failed on.
-//
-//nolint:paralleltest // captures the default logger, which is process-wide
 func TestFailedRequestIsLogged(t *testing.T) {
-	log := captureLog(t)
+	t.Parallel()
 
-	ts := newTestServer(&fakeAgent{})
+	logger, log := captureLog()
+
+	ts := newLoggedTestServer(&fakeAgent{}, logger)
 	defer ts.Close()
 
 	resp := post(t, ts.URL+"/api/ask", `{"text":"   "}`)
 	defer resp.Body.Close()
 
-	for _, want := range []string{"request failed", "/api/ask", "status=400", "empty question"} {
+	for _, want := range []string{"request failed", "method=POST", "path=/api/ask", "status=400", "empty question"} {
 		if !strings.Contains(log.String(), want) {
 			t.Errorf("log missing %q:\n%s", want, log.String())
 		}
@@ -89,12 +83,12 @@ func TestFailedRequestIsLogged(t *testing.T) {
 
 // A panicking agent used to take the process with it and leave the page
 // waiting for ever; now the turn just fails.
-//
-//nolint:paralleltest // captures the default logger, which is process-wide
 func TestTurnSurvivesAPanickingAgent(t *testing.T) {
-	log := captureLog(t)
+	t.Parallel()
 
-	ts := newTestServer(&fakeAgent{panics: "kaboom"})
+	logger, log := captureLog()
+
+	ts := newLoggedTestServer(&fakeAgent{panics: "kaboom"}, logger)
 	defer ts.Close()
 
 	body, drop := openStream(t, ts.URL, 0)
@@ -107,8 +101,10 @@ func TestTurnSurvivesAPanickingAgent(t *testing.T) {
 		t.Errorf("the panic never reached the page:\n%s", got)
 	}
 
-	if !strings.Contains(log.String(), "turn panicked") {
-		t.Errorf("the panic was not logged:\n%s", log.String())
+	for _, want := range []string{"turn panicked", "turn=1"} {
+		if !strings.Contains(log.String(), want) {
+			t.Errorf("log missing %q:\n%s", want, log.String())
+		}
 	}
 
 	// The agent is free again: the next question is accepted.

@@ -45,6 +45,7 @@ function applyLanguage() {
   turns.forEach(renderMeta);
   turns.forEach((turn) => turn.clips.forEach(renderClip));
   renderNarrator();
+  renderUnsent();
   renderCosts();
   renderState();
 }
@@ -216,31 +217,16 @@ async function stopListening() {
   }
   state = 'transcribing';
   renderState();
+  let wav;
   try {
-    const wav = await rec.stop();
-    if (!wav) { warn('record', 'tooShort'); return; }
-    const resp = await fetch('/api/transcribe', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ audio: wav, format: 'wav', lang: settings.lang }),
-    });
-    if (!resp.ok) throw await httpError(resp);
-    const { text, cost_usd: cost } = await resp.json();
-    pendingStt = cost || 0;
-    if (!text) { warn('transcribe', 'noSpeech'); return; }
-    if (settings.autoSend) {
-      state = 'idle';
-      ask(text);
-    } else {
-      el.input.value = text;
-      resizeInput();
-      el.input.focus();
-      flash(t('hintEdit'));
-    }
-  } catch (err) {
-    fail('transcribe', 'transcribeFailed', err);
-  } finally {
-    if (state === 'transcribing') { state = 'idle'; renderState(); }
+    wav = await rec.stop();
+  } catch (err) { // the browser could not decode its own recording
+    state = 'idle';
+    fail('record', 'transcribeFailed', err);
+    return;
   }
+  if (!wav) { state = 'idle'; warn('record', 'tooShort'); return; }
+  transcribe(wav); // see transcribe.js, which keeps the recording if this fails
 }
 
 function cancelListening() {

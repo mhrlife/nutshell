@@ -32,12 +32,13 @@ const (
 type Agent struct {
 	bin       string
 	extraArgs []string
+	logger    *slog.Logger
 
 	turn sync.Mutex // serializes Ask calls
 
 	mu        sync.Mutex // guards the fields below
 	proc      *process
-	lang      lang.Language // the language proc's system prompt was built for
+	language  lang.Language // the language proc's system prompt was built for
 	sessionID string
 	cancelled bool
 	costBase  float64                       // cumulative cost already attributed to earlier turns of this process
@@ -73,9 +74,10 @@ func (p *process) send(v any) error {
 
 // New returns an agent that runs bin (normally "claude") in the current
 // directory. extraArgs are appended to the command line unchanged, so callers
-// can forward flags such as --model or --mcp-config.
-func New(bin string, extraArgs []string) *Agent {
-	return &Agent{bin: bin, extraArgs: extraArgs}
+// can forward flags such as --model or --mcp-config. logger receives what the
+// agent logs.
+func New(bin string, extraArgs []string, logger *slog.Logger) *Agent {
+	return &Agent{bin: bin, extraArgs: extraArgs, logger: logger}
 }
 
 // Name implements agent.Agent.
@@ -121,7 +123,7 @@ func (a *Agent) Ask(ctx context.Context, req agent.Request, h agent.Handler) (ag
 	defer a.turn.Unlock()
 	defer a.withdrawAllPrompts()
 
-	proc, err := a.ensureProcess(req.Language)
+	proc, err := a.ensureProcess(ctx, req.Language)
 	if err != nil {
 		return agent.Answer{}, err
 	}
@@ -142,16 +144,16 @@ func (a *Agent) Ask(ctx context.Context, req agent.Request, h agent.Handler) (ag
 // claude through --append-system-prompt, which is only read at startup, so
 // switching language means a new process; the conversation survives it
 // because the new one resumes the same session.
-func (a *Agent) ensureProcess(l lang.Language) (*process, error) {
+func (a *Agent) ensureProcess(ctx context.Context, l lang.Language) (*process, error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
-	if a.proc != nil && a.lang.Code != l.Code {
-		slog.Debug("language changed, restarting claude", "from", a.lang.Code, "to", l.Code)
+	if a.proc != nil && a.language.Code != l.Code {
+		a.logger.DebugContext(ctx, "language changed, restarting claude", "from", a.language.Code, "to", l.Code)
 		a.stopLocked()
 	}
 
-	a.lang = l
+	a.language = l
 
 	if a.proc == nil {
 		proc, err := a.startLocked()
@@ -199,7 +201,7 @@ func (a *Agent) startLocked() (*process, error) {
 		"--input-format", "stream-json",
 		"--output-format", "stream-json",
 		"--verbose",
-		"--append-system-prompt", agent.AnswerPrompt(a.lang),
+		"--append-system-prompt", agent.Instructions(a.language),
 		// Route permission requests and questions to us over stdio instead
 		// of letting claude deny them for want of anyone to ask.
 		"--permission-prompt-tool", "stdio",

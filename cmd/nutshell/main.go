@@ -43,25 +43,27 @@ var (
 )
 
 func main() {
-	if err := run(); err != nil {
+	// The level is only known once the flags are parsed. A LevelVar lets the
+	// logger exist before that, so even a bad flag is reported through it.
+	var level slog.LevelVar
+
+	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: &level}))
+
+	if err := run(logger, &level); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			return
 		}
 
-		slog.Error("nutshell", "error", err)
+		logger.Error("nutshell", "error", err)
 		os.Exit(1)
 	}
 }
 
-func run() error {
-	slog.SetDefault(newLogger(false))
-
+func run(logger *slog.Logger, level *slog.LevelVar) error {
 	opts, err := cli.Parse(os.Args[1:], os.Getenv, os.Stderr)
 	if err != nil {
 		return err
 	}
-
-	slog.SetDefault(newLogger(opts.Debug))
 
 	if opts.Version {
 		fmt.Fprintf(os.Stdout, "%s (%s, %s)\n", version, commit, date)
@@ -69,7 +71,16 @@ func run() error {
 		return nil
 	}
 
-	ag, err := newAgent(opts)
+	if opts.Debug {
+		// --debug adds the per-request, per-turn and per-OpenRouter-call
+		// detail that explains a UI which looks like it did nothing at all.
+		level.Set(slog.LevelDebug)
+	}
+
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	ag, err := newAgent(opts, logger)
 	if err != nil {
 		return err
 	}
@@ -77,11 +88,11 @@ func run() error {
 
 	sp := speech.New(speech.Config{
 		APIKey: opts.APIKey, STTModel: opts.STTModel, SummaryModel: opts.SummaryModel,
-		TTSModel: opts.TTSModel, Voice: opts.TTSVoice, Style: speech.ResolveStyle(opts.TTSPrompt),
+		TTSModel: opts.TTSModel, Voice: opts.TTSVoice, Style: speech.ResolveStyle(opts.TTSStyle),
 		Speed: opts.TTSSpeed,
-	})
+	}, logger)
 	if !sp.Enabled() {
-		slog.Warn("no OpenRouter key (set OPENROUTER_API_KEY or --openrouter-key); voice is off, typing still works")
+		logger.WarnContext(ctx, "no OpenRouter key (set OPENROUTER_API_KEY or --openrouter-key); voice is off, typing still works")
 	}
 
 	cwd, err := os.Getwd()
@@ -95,10 +106,8 @@ func run() error {
 	}
 
 	store := settings.New(settingsPath)
-	handler := server.New(ag, sp, store, http.FS(web.FS()), server.Config{Lang: opts.Lang, Project: filepath.Base(cwd)})
-
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	defer stop()
+	cfg := server.Config{Lang: opts.Lang, Project: filepath.Base(cwd)}
+	handler := server.New(ag, sp, store, http.FS(web.FS()), cfg, logger)
 
 	var lc net.ListenConfig
 
@@ -108,24 +117,24 @@ func run() error {
 	}
 
 	url := "http://" + ln.Addr().String()
-	httpSrv := &http.Server{Handler: handler, ReadHeaderTimeout: readHeaderTimeout}
+	httpSrv := &http.Server{
+		Handler:           handler,
+		ReadHeaderTimeout: readHeaderTimeout,
+		ErrorLog:          slog.NewLogLogger(logger.Handler(), slog.LevelWarn),
+	}
 
 	errCh := make(chan error, 1)
 
 	go func() { errCh <- httpSrv.Serve(ln) }()
 
-	slog.Info("ready", "url", url, "agent", ag.Name(), "dir", cwd, "settings", settingsPath)
+	logger.InfoContext(ctx, "ready", "url", url, "agent", ag.Name(), "dir", cwd, "settings", settingsPath)
 
 	if len(opts.AgentArgs) > 0 {
-		slog.Info("forwarding to agent", "args", strings.Join(opts.AgentArgs, " "))
+		logger.InfoContext(ctx, "forwarding to agent", "args", strings.Join(opts.AgentArgs, " "))
 	}
 
 	if !opts.NoOpen {
-		if err := browser.Open(ctx, url); err != nil {
-			slog.Warn("could not open a browser", "error", err, "url", url)
-		} else {
-			slog.Info("opening browser", "url", url)
-		}
+		openBrowser(ctx, logger, url)
 	}
 
 	select {
@@ -134,7 +143,7 @@ func run() error {
 	case <-ctx.Done():
 	}
 
-	slog.Info("shutting down")
+	logger.InfoContext(ctx, "shutting down")
 
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
 	defer cancel()
@@ -142,20 +151,20 @@ func run() error {
 	return httpSrv.Shutdown(shutdownCtx)
 }
 
-// newLogger writes to stderr. With --debug it also carries the per-request,
-// per-turn and per-OpenRouter-call detail that explains a UI which looks like
-// it did nothing at all.
-func newLogger(debug bool) *slog.Logger {
-	level := slog.LevelInfo
-	if debug {
-		level = slog.LevelDebug
+// openBrowser shows the UI. Failing to is only worth a warning: the URL is
+// already in the log.
+func openBrowser(ctx context.Context, logger *slog.Logger, url string) {
+	if err := browser.Open(ctx, url); err != nil {
+		logger.WarnContext(ctx, "could not open a browser", "error", err, "url", url)
+
+		return
 	}
 
-	return slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: level}))
+	logger.InfoContext(ctx, "opening browser", "url", url)
 }
 
 // newAgent picks the agent implementation named by the flags.
-func newAgent(opts cli.Options) (agent.Agent, error) {
+func newAgent(opts cli.Options, logger *slog.Logger) (agent.Agent, error) {
 	switch opts.Agent {
 	case "claude":
 		bin := opts.AgentBin
@@ -167,7 +176,7 @@ func newAgent(opts cli.Options) (agent.Agent, error) {
 			return nil, fmt.Errorf("agent executable: %w", err)
 		}
 
-		return claudecode.New(bin, opts.AgentArgs), nil
+		return claudecode.New(bin, opts.AgentArgs, logger), nil
 	default:
 		return nil, fmt.Errorf("unknown agent %q (supported: claude)", opts.Agent)
 	}

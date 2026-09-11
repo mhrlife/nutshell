@@ -36,15 +36,17 @@ type logEntry struct {
 
 // session is the append-only record of the conversation.
 type session struct {
-	mu      sync.Mutex
+	logger *slog.Logger
+
+	mu      sync.Mutex // guards the fields below
 	entries []logEntry
 	seq     int
 	turns   int
 	changed chan struct{} // closed on every append, then replaced by the next one
 }
 
-func newSession() *session {
-	return &session{changed: make(chan struct{})}
+func newSession(logger *slog.Logger) *session {
+	return &session{logger: logger, changed: make(chan struct{})}
 }
 
 // startTurn records a question, with the excerpt of the passage it is about
@@ -70,7 +72,7 @@ func (s *session) startTurn(question, selection string) int {
 func (s *session) add(turn int, kind string, data any) {
 	raw, err := json.Marshal(data)
 	if err != nil {
-		slog.Error("recording a session entry", "kind", kind, "error", err)
+		s.logger.Error("recording a session entry", "turn", turn, "kind", kind, "error", err)
 
 		return
 	}

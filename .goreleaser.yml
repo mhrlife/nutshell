@@ -40,8 +40,10 @@ archives:
     format_overrides:
       - goos: windows
         formats: [zip]
+    # MIT asks for the license to travel with every copy, binaries included.
     files:
       - README.md
+      - LICENSE
 
 checksum:
   name_template: checksums.txt

@@ -1,7 +1,7 @@
 // Package lang holds what nutshell knows about each language the user can
 // speak. The browser sends the language picked in its settings with every
 // request, and the coding agent, the transcriber and the voice each take
-// their rules from here — so no prompt has to carry the rules of every
+// their rules from here — so no instructions have to carry the rules of every
 // language at once, and adding a language is adding an entry.
 package lang
 
@@ -9,7 +9,7 @@ import "strings"
 
 // Language is one language together with the instructions each model needs
 // to work in it. A Language nutshell has no entry for keeps only its Code:
-// every prompt then falls back to language-agnostic wording rather than
+// all instructions then fall back to language-agnostic wording rather than
 // asserting rules for a language nobody wrote down.
 type Language struct {
 	// Code is what the browser sends, e.g. "fa".

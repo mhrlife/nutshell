@@ -27,7 +27,7 @@ const (
 func (s *Server) handleStream(w http.ResponseWriter, r *http.Request) {
 	flusher, ok := w.(http.Flusher)
 	if !ok {
-		writeError(w, r, http.StatusInternalServerError, errors.New("streaming unsupported by this connection"))
+		s.writeError(w, r, http.StatusInternalServerError, errors.New("streaming unsupported by this connection"))
 
 		return
 	}

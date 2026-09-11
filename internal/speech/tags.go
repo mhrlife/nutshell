@@ -42,9 +42,9 @@ func speaksTags(model string) bool {
 	return strings.HasPrefix(model, "x-ai/grok-voice-tts")
 }
 
-// TagsPrompt tells a model writing for the voice which tags it may use
+// tagInstructions tells a model writing for the voice which tags it may use
 // and how sparingly.
-func TagsPrompt() string {
+func tagInstructions() string {
 	return `Your summary is read by a voice that performs delivery tags instead of reading them out. Use them so it sounds like a colleague talking, not text being read: a [pause] before the point that matters, <emphasis> around the one word that carries it, <slow> for a warning, a [chuckle] or [sigh] only where a person would genuinely make that sound.
 
 Use one to three tags in the whole summary, never one per sentence, and none when the passage gives no reason for them. Wrapping tags open and close around a whole phrase within one sentence. Tags are the only markup allowed, spelled exactly as listed:

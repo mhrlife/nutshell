@@ -5,8 +5,8 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"log/slog"
 	"net/http"
-	"strings"
 	"sync/atomic"
 
 	"github.com/mhrlife/nutshell/internal/agent"
@@ -37,36 +37,43 @@ type Config struct {
 
 // Server is the HTTP handler for the UI and its API.
 type Server struct {
-	mux      *http.ServeMux
+	handler  http.Handler
 	agent    agent.Agent
 	speech   Speech
 	settings Settings
 	cfg      Config
+	logger   *slog.Logger
 	busy     atomic.Bool
 	prompts  *promptDesk
 	session  *session
 }
 
-// New wires the routes. static serves the UI (index.html at its root).
-func New(ag agent.Agent, sp Speech, st Settings, static http.FileSystem, cfg Config) *Server {
+// New wires the routes. static serves the UI (index.html at its root), and
+// logger receives everything the server logs.
+func New(ag agent.Agent, sp Speech, st Settings, static http.FileSystem, cfg Config, logger *slog.Logger) *Server {
 	s := &Server{
-		mux: http.NewServeMux(), agent: ag, speech: sp, settings: st, cfg: cfg,
-		prompts: newPromptDesk(), session: newSession(),
+		agent: ag, speech: sp, settings: st, cfg: cfg, logger: logger,
+		prompts: newPromptDesk(), session: newSession(logger),
 	}
 
-	s.mux.Handle("GET /", http.FileServer(static))
-	s.mux.HandleFunc("GET /api/config", s.handleConfig)
-	s.mux.HandleFunc("GET /api/stream", s.handleStream)
-	s.mux.HandleFunc("POST /api/transcribe", s.handleTranscribe)
-	s.mux.HandleFunc("POST /api/ask", s.handleAsk)
-	s.mux.HandleFunc("POST /api/answer", s.handleAnswer)
-	s.mux.HandleFunc("POST /api/cancel", s.handleCancel)
-	s.mux.HandleFunc("POST /api/speak", s.handleSpeak)
-	s.mux.HandleFunc("POST /api/summarize", s.handleSummarize)
-	s.mux.HandleFunc("GET /api/cost", s.handleCost)
-	s.mux.HandleFunc("GET /api/settings", s.handleGetSettings)
-	s.mux.HandleFunc("POST /api/log", s.handleClientLog)
-	s.mux.HandleFunc("PUT /api/settings", s.handlePutSettings)
+	mux := http.NewServeMux()
+	mux.Handle("GET /", http.FileServer(static))
+	mux.HandleFunc("GET /api/config", s.handleConfig)
+	mux.HandleFunc("GET /api/stream", s.handleStream)
+	mux.HandleFunc("POST /api/transcribe", s.handleTranscribe)
+	mux.HandleFunc("POST /api/ask", s.handleAsk)
+	mux.HandleFunc("POST /api/answer", s.handleAnswer)
+	mux.HandleFunc("POST /api/cancel", s.handleCancel)
+	mux.HandleFunc("POST /api/speak", s.handleSpeak)
+	mux.HandleFunc("POST /api/summarize", s.handleSummarize)
+	mux.HandleFunc("GET /api/cost", s.handleCost)
+	mux.HandleFunc("GET /api/settings", s.handleGetSettings)
+	mux.HandleFunc("POST /api/log", s.handleClientLog)
+	mux.HandleFunc("PUT /api/settings", s.handlePutSettings)
+
+	// Requests are logged before the guard sees them, so one it turns away
+	// shows up like any other failure.
+	s.handler = s.logRequests(s.guard(mux))
 
 	return s
 }
@@ -74,14 +81,7 @@ func New(ag agent.Agent, sp Speech, st Settings, static http.FileSystem, cfg Con
 // ServeHTTP implements http.Handler.
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store")
-
-	if !strings.HasPrefix(r.URL.Path, "/api/") {
-		s.mux.ServeHTTP(w, r)
-
-		return
-	}
-
-	s.logAPI(s.mux, w, r)
+	s.handler.ServeHTTP(w, r)
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {
