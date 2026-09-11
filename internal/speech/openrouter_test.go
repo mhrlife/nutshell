@@ -3,7 +3,26 @@ package speech
 import (
 	"reflect"
 	"testing"
+
+	"github.com/mhrlife/nutshell/internal/lang"
 )
+
+// The narrator sends speech tags whatever the voice; only a voice that
+// performs them may receive them.
+func TestSpeechInputTags(t *testing.T) {
+	t.Parallel()
+
+	const text = "[pause] <emphasis>Setup</emphasis>. Run it."
+
+	if got := New(Config{TTSModel: "x-ai/grok-voice-tts-1.0"}).speechInput(text, lang.Language{}); got != text {
+		t.Errorf("grok input = %q, want the tags kept", got)
+	}
+
+	gemini := New(Config{TTSModel: "google/gemini-3.1-flash-tts-preview", Style: LectureStyle})
+	if got, want := gemini.speechInput(text, lang.Language{}), SpeakInstruction(LectureStyle, lang.Language{})+"Setup. Run it."; got != want {
+		t.Errorf("gemini input = %q, want %q", got, want)
+	}
+}
 
 // Grok ignores OpenRouter's top-level speed, so a faster voice depends on the
 // value also arriving as an xAI provider option.

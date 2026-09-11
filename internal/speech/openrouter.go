@@ -136,7 +136,7 @@ func (c *Client) chat(ctx context.Context, model string, messages []any) (string
 // in, so the voice reads it the way that language is spoken rather than
 // sounding out foreign words.
 func (c *Client) Speak(ctx context.Context, text string, l lang.Language) (Clip, error) {
-	resp, err := c.post(ctx, speechURL, c.speechRequest(SpeakInstruction(c.cfg.Style, l)+text))
+	resp, err := c.post(ctx, speechURL, c.speechRequest(c.speechInput(text, l)))
 	if err != nil {
 		return Clip{}, err
 	}
@@ -157,6 +157,18 @@ func (c *Client) Speak(ctx context.Context, text string, l lang.Language) (Clip,
 		Audio:        wavFromPCM16(pcm, pcmSampleRate, pcmChannels),
 		GenerationID: resp.Header.Get("X-Generation-Id"),
 	}, nil
+}
+
+// speechInput is what the voice is handed to say text in l: the delivery
+// instructions, then the text. The browser marks up what it sends with speech
+// tags, so a voice that does not perform them gets the text without, rather
+// than reading every tag out.
+func (c *Client) speechInput(text string, l lang.Language) string {
+	if !speaksTags(c.cfg.TTSModel) {
+		text = stripSpeechTags(text)
+	}
+
+	return SpeakInstruction(c.cfg.Style, l) + text
 }
 
 // speechRequest is the /audio/speech body that reads input aloud.
