@@ -126,7 +126,7 @@ func (a *Agent) Ask(ctx context.Context, req agent.Request, h agent.Handler) (ag
 		return agent.Answer{}, err
 	}
 
-	if err := proc.send(userMessage(req.Text)); err != nil {
+	if err := proc.send(userMessage(req.Message())); err != nil {
 		a.mu.Lock()
 		a.stopLocked()
 		a.mu.Unlock()

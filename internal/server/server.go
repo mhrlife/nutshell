@@ -19,6 +19,7 @@ type Speech interface {
 	Enabled() bool
 	Transcribe(ctx context.Context, audioB64, format string, l lang.Language) (speech.Transcript, error)
 	Speak(ctx context.Context, text string, l lang.Language) (speech.Clip, error)
+	Summarize(ctx context.Context, passage string, l lang.Language) (speech.Summary, error)
 	GenerationCost(ctx context.Context, id string) (float64, error)
 }
 
@@ -61,6 +62,7 @@ func New(ag agent.Agent, sp Speech, st Settings, static http.FileSystem, cfg Con
 	s.mux.HandleFunc("POST /api/answer", s.handleAnswer)
 	s.mux.HandleFunc("POST /api/cancel", s.handleCancel)
 	s.mux.HandleFunc("POST /api/speak", s.handleSpeak)
+	s.mux.HandleFunc("POST /api/summarize", s.handleSummarize)
 	s.mux.HandleFunc("GET /api/cost", s.handleCost)
 	s.mux.HandleFunc("GET /api/settings", s.handleGetSettings)
 	s.mux.HandleFunc("POST /api/log", s.handleClientLog)

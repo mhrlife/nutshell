@@ -44,9 +44,15 @@ type Clip struct {
 type Config struct {
 	APIKey   string
 	STTModel string // chat model with audio input, e.g. google/gemini-3.8-flash
-	TTSModel string // audio/speech model, e.g. google/gemini-3.1-flash-tts-preview
-	Voice    string // voice name understood by TTSModel
-	Style    string // delivery instructions placed before the transcript, see ResolveStyle
+	// SummaryModel is the chat model that shortens a selected passage before
+	// it is spoken, e.g. google/gemini-3.8-flash.
+	SummaryModel string
+	TTSModel     string // text-to-speech model, e.g. x-ai/grok-voice-tts-1.0
+	Voice        string // voice name understood by TTSModel
+	Style        string // delivery instructions placed before the transcript, see ResolveStyle
+	// Speed multiplies how fast the voice talks; 0 and 1 leave the model's
+	// own pace. x-ai/grok-voice-tts-1.0 accepts 0.7 to 1.5.
+	Speed float64
 }
 
 // Client talks to OpenRouter. The zero value is disabled.
@@ -68,29 +74,39 @@ func (c *Client) Enabled() bool { return c != nil && c.cfg.APIKey != "" }
 // l is the language the browser had selected, which tells the model what to
 // expect from the microphone.
 func (c *Client) Transcribe(ctx context.Context, audioB64, format string, l lang.Language) (Transcript, error) {
-	instruction := TranscribeInstruction(l)
-
-	body := map[string]any{
-		"model": c.cfg.STTModel,
-		"messages": []any{
-			map[string]any{
-				"role": "user",
-				"content": []any{
-					map[string]any{"type": "text", "text": instruction},
-					map[string]any{
-						"type":        "input_audio",
-						"input_audio": map[string]string{"data": audioB64, "format": format},
-					},
+	messages := []any{
+		map[string]any{
+			"role": "user",
+			"content": []any{
+				map[string]any{"type": "text", "text": TranscribeInstruction(l)},
+				map[string]any{
+					"type":        "input_audio",
+					"input_audio": map[string]string{"data": audioB64, "format": format},
 				},
 			},
 		},
+	}
+
+	text, cost, err := c.chat(ctx, c.cfg.STTModel, messages)
+	if err != nil {
+		return Transcript{}, err
+	}
+
+	return Transcript{Text: text, CostUSD: cost}, nil
+}
+
+// chat sends one chat completion and returns the reply with what it cost.
+func (c *Client) chat(ctx context.Context, model string, messages []any) (string, float64, error) {
+	body := map[string]any{
+		"model":       model,
+		"messages":    messages,
 		"temperature": 0,
 		"usage":       map[string]bool{"include": true},
 	}
 
 	resp, err := c.post(ctx, chatURL, body)
 	if err != nil {
-		return Transcript{}, err
+		return "", 0, err
 	}
 	defer resp.Body.Close()
 
@@ -106,30 +122,21 @@ func (c *Client) Transcribe(ctx context.Context, audioB64, format string, l lang
 	}
 
 	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
-		return Transcript{}, fmt.Errorf("decoding transcript: %w", err)
+		return "", 0, fmt.Errorf("decoding reply: %w", err)
 	}
 
 	if len(out.Choices) == 0 {
-		return Transcript{}, errors.New("openrouter returned no transcript")
+		return "", 0, errors.New("openrouter returned no reply")
 	}
 
-	return Transcript{Text: strings.TrimSpace(out.Choices[0].Message.Content), CostUSD: out.Usage.Cost}, nil
+	return strings.TrimSpace(out.Choices[0].Message.Content), out.Usage.Cost, nil
 }
 
 // Speak converts text to a WAV clip. l is the language the text is written
 // in, so the voice reads it the way that language is spoken rather than
 // sounding out foreign words.
 func (c *Client) Speak(ctx context.Context, text string, l lang.Language) (Clip, error) {
-	text = SpeakInstruction(c.cfg.Style, l) + text
-
-	body := map[string]any{
-		"model":           c.cfg.TTSModel,
-		"input":           text,
-		"voice":           c.cfg.Voice,
-		"response_format": "pcm",
-	}
-
-	resp, err := c.post(ctx, speechURL, body)
+	resp, err := c.post(ctx, speechURL, c.speechRequest(SpeakInstruction(c.cfg.Style, l)+text))
 	if err != nil {
 		return Clip{}, err
 	}
@@ -150,6 +157,28 @@ func (c *Client) Speak(ctx context.Context, text string, l lang.Language) (Clip,
 		Audio:        wavFromPCM16(pcm, pcmSampleRate, pcmChannels),
 		GenerationID: resp.Header.Get("X-Generation-Id"),
 	}, nil
+}
+
+// speechRequest is the /audio/speech body that reads input aloud.
+func (c *Client) speechRequest(input string) map[string]any {
+	body := map[string]any{
+		"model":           c.cfg.TTSModel,
+		"input":           input,
+		"voice":           c.cfg.Voice,
+		"response_format": "pcm",
+	}
+
+	if c.cfg.Speed != 0 && c.cfg.Speed != 1 {
+		// OpenRouter documents a top-level speed, but does not hand it on to
+		// xAI: x-ai/grok-voice-tts-1.0 only speeds up when the value travels
+		// as an xAI provider option. Other providers ignore that option.
+		body["speed"] = c.cfg.Speed
+		body["provider"] = map[string]any{
+			"options": map[string]any{"xai": map[string]any{"speed": c.cfg.Speed}},
+		}
+	}
+
+	return body
 }
 
 func (c *Client) post(ctx context.Context, url string, body any) (*http.Response, error) {

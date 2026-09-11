@@ -36,7 +36,7 @@ body {
 html[dir="rtl"] body { font-family: var(--fa); }
 
 /* text blocks pick their font from their own direction */
-.q:dir(rtl), .summary:dir(rtl), .md:dir(rtl), .error:dir(rtl), .think:dir(rtl), #input:dir(rtl) { font-family: var(--fa); }
+.q:dir(rtl), .summary:dir(rtl), .md:dir(rtl), .error:dir(rtl), .think:dir(rtl), #input:dir(rtl), .quote-text:dir(rtl), .q-quote:dir(rtl), .clip-quote:dir(rtl), .clip-text:dir(rtl) { font-family: var(--fa); }
 .q:dir(ltr), .summary:dir(ltr), .md:dir(ltr), .error:dir(ltr) { font-family: var(--serif), var(--fa); }
 .think:dir(ltr), #input:dir(ltr) { font-family: var(--sans), var(--fa); }
 
@@ -95,6 +95,11 @@ html[dir="rtl"] .empty p { font-family: var(--fa); font-style: normal; }
 
 .turn .q { font-style: italic; font-weight: 400; color: var(--muted); font-size: 15px; line-height: 1.4; white-space: pre-wrap; }
 
+/* the passage a question was about, quoted the way a chat app quotes a reply */
+.q-quote, .quote-text, .clip-quote { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; unicode-bidi: plaintext; text-align: start; }
+
+.q-quote { font-size: 13px; color: var(--muted); padding-inline-start: 10px; border-inline-start: 2px solid var(--muted-2); }
+
 .turn .summary { font-size: 16px; line-height: 1.7; text-wrap: pretty; color: var(--ink-2); }
 
 .turn.selected .summary { color: var(--ink); }
@@ -111,15 +116,55 @@ html[dir="rtl"] .empty p { font-family: var(--fa); font-style: normal; }
 
 .meta { display: flex; align-items: center; gap: 10px; color: var(--muted); font-size: 12px; margin-inline-start: -8px; }
 
-.meta .icon-btn { width: 28px; height: 28px; }
+.meta .icon-btn, .clip .icon-btn { width: 28px; height: 28px; flex-shrink: 0; }
 
-.meta .icon-btn svg { width: 14px; height: 14px; }
+.meta .icon-btn svg, .clip .icon-btn svg { width: 14px; height: 14px; }
 
 .open-full { color: var(--accent); font-size: 12px; }
 
 .error { color: var(--danger); font-size: 13px; }
 
+/* passages of the answer heard aloud, kept under the turn to be played again */
+.clips { display: flex; flex-direction: column; gap: 10px; }
+
+.clip { display: flex; align-items: flex-start; gap: 8px; margin-inline-start: -8px; }
+
+.clip-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; padding-top: 4px; }
+
+.clip-label { font-size: 12px; color: var(--muted); }
+
+.clip-quote { font-size: 13px; color: var(--muted); padding-inline-start: 10px; border-inline-start: 2px solid var(--muted-2); }
+
+.clip-text { font-size: 14px; line-height: 1.6; color: var(--ink-2); unicode-bidi: plaintext; text-align: start; }
+
+.clip[data-status="summarizing"] .clip-play,
+.clip[data-status="voicing"] .clip-play,
+.clip[data-status="summarizing"] .clip-label,
+.clip[data-status="voicing"] .clip-label,
+.clip.playing .clip-label { color: var(--accent); }
+
+.clip[data-status="summarizing"] .clip-play,
+.clip[data-status="voicing"] .clip-play { cursor: default; }
+
+.clip[data-status="summarizing"] .clip-play svg,
+.clip[data-status="voicing"] .clip-play svg { animation: spin 1s linear infinite; }
+
+.clip[data-status="summarizing"] .clip-label,
+.clip[data-status="voicing"] .clip-label { animation: pulse 1.6s ease-in-out infinite; }
+
+.clip.playing .clip-quote { border-inline-start-color: var(--accent); }
+
+.clip[data-status="failed"] .clip-label { color: var(--danger); }
+
 .rail-foot { display: flex; flex-direction: column; gap: 14px; padding: 16px 20px 22px 28px; border-top: 1px solid var(--line); min-height: 92px; justify-content: center; }
+
+.quote { display: flex; align-items: center; gap: 8px; padding-inline-start: 10px; border-inline-start: 2px solid var(--accent); }
+
+.quote-text { flex: 1; min-width: 0; font-size: 13px; color: var(--ink-2); }
+
+.quote .icon-btn { width: 24px; height: 24px; flex-shrink: 0; }
+
+.quote .icon-btn svg { width: 12px; height: 12px; }
 
 .foot-row { display: flex; align-items: center; gap: 12px; min-height: 52px; }
 
@@ -432,3 +477,21 @@ html[dir="rtl"] .switch.on::after { transform: translateX(-14px); }
 .prompt-dismiss:hover, .prompt-back:hover { color: var(--ink); }
 
 .prompt-send { font-size: 13px; color: var(--accent); }
+
+/* what can be done with a passage selected in the full answer */
+.selection-bar {
+  position: fixed;
+  z-index: 10;
+  display: flex;
+  gap: 2px;
+  padding: 3px;
+  background: var(--ink);
+  border-radius: 8px;
+  box-shadow: 0 6px 20px rgba(42, 38, 34, 0.22);
+}
+
+.selection-bar button { color: var(--rail); font-size: 12px; padding: 5px 10px; border-radius: 6px; white-space: nowrap; }
+
+.selection-bar button:hover { background: rgba(255, 253, 248, 0.14); }
+
+html[dir="rtl"] .selection-bar button { font-family: var(--fa); }

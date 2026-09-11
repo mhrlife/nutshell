@@ -10,6 +10,7 @@
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="stylesheet" href="fonts/fonts.css">
 <link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="narrator.css">
 </head>
 <body>
 <aside class="rail">
@@ -26,6 +27,10 @@
   </div>
 
   <footer class="rail-foot" id="foot" data-state="idle">
+    <div id="quote" class="quote" hidden>
+      <span class="quote-text"></span>
+      <button class="quote-clear icon-btn" type="button"></button>
+    </div>
     <div class="foot-row">
       <button id="talk" class="mic" type="button"></button>
       <textarea id="input" rows="1" spellcheck="false"></textarea>
@@ -40,9 +45,29 @@
   <div class="doc-head">
     <span class="doc-tools">
       <span id="doc-cost" class="cost" hidden></span>
+      <button id="listen" class="icon-btn" type="button" hidden></button>
       <button id="copy" class="icon-btn" type="button"></button>
       <button id="doc-close" class="icon-btn narrow-only" type="button"></button>
     </span>
+  </div>
+  <div id="narrator" class="narrator" dir="ltr" hidden>
+    <div class="np-row">
+      <button class="np-toggle" type="button"></button>
+      <button class="np-back np-skip icon-btn" type="button"></button>
+      <button class="np-forward np-skip icon-btn" type="button"></button>
+      <div class="np-seek">
+        <span class="np-time np-elapsed"></span>
+        <div class="np-track" role="slider" aria-valuemin="0">
+          <div class="np-ready"></div>
+          <div class="np-played"></div>
+          <div class="np-knob"></div>
+        </div>
+        <span class="np-time np-total"></span>
+      </div>
+      <button class="np-rate" type="button"></button>
+      <button class="np-close icon-btn" type="button"></button>
+    </div>
+    <div class="np-note" hidden></div>
   </div>
   <article id="doc-body" class="md" dir="auto" hidden></article>
   <div id="doc-empty" class="doc-empty">
@@ -51,11 +76,18 @@
   </div>
 </main>
 
+<div id="selection-bar" class="selection-bar" hidden>
+  <button type="button" data-act="read"></button>
+  <button type="button" data-act="summary"></button>
+  <button type="button" data-act="ask"></button>
+</div>
+
 <div id="settings" class="sheet" hidden></div>
 <div id="prompt" class="modal" hidden></div>
 
 <template id="turn-template">
   <article class="turn">
+    <div class="q-quote" hidden></div>
     <div class="q" dir="auto"></div>
     <div class="activity" hidden></div>
     <div class="summary" dir="auto" hidden></div>
@@ -64,8 +96,20 @@
       <button class="open-full narrow-only" type="button"></button>
       <span class="cost" hidden></span>
     </div>
+    <div class="clips" hidden></div>
     <div class="error" dir="auto" hidden></div>
   </article>
+</template>
+
+<template id="clip-template">
+  <div class="clip">
+    <button class="clip-play icon-btn" type="button"></button>
+    <div class="clip-body">
+      <div class="clip-label"></div>
+      <div class="clip-quote"></div>
+      <div class="clip-text" hidden></div>
+    </div>
+  </div>
 </template>
 
 <script src="vendor/marked.min.js"></script>
@@ -78,6 +122,9 @@
 <script src="audio.js"></script>
 <script src="cost.js"></script>
 <script src="session.js"></script>
+<script src="selection.js"></script>
+<script src="clips.js"></script>
+<script src="narrator.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

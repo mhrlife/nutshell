@@ -68,3 +68,22 @@ func TestTranscribeInstruction(t *testing.T) {
 		t.Errorf("hinted = %q", hinted)
 	}
 }
+
+// A spoken summary has to sound like the spoken part of an answer, so it
+// carries that language's register rules, and only that language's.
+func TestSummarizeInstruction(t *testing.T) {
+	t.Parallel()
+
+	persian := SummarizeInstruction(lang.Lookup("fa"))
+	if !strings.HasPrefix(persian, SummarizePrompt) || !strings.Contains(persian, "محاوره") {
+		t.Errorf("the Persian instruction lost its register rules:\n%s", persian)
+	}
+
+	if english := SummarizeInstruction(lang.Lookup("en")); strings.Contains(english, "محاوره") {
+		t.Errorf("the English instruction carries the Persian rules:\n%s", english)
+	}
+
+	if unknown := SummarizeInstruction(lang.Lookup("xx")); !strings.Contains(unknown, "the language of the passage") {
+		t.Errorf("a language without rules lost its fallback:\n%s", unknown)
+	}
+}

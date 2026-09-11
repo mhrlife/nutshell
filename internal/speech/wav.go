@@ -6,7 +6,7 @@ import (
 )
 
 const (
-	pcmSampleRate = 24000 // Gemini TTS emits 24 kHz mono 16-bit PCM
+	pcmSampleRate = 24000 // OpenRouter returns pcm as 24 kHz mono 16-bit samples
 	pcmChannels   = 1
 	pcmBitDepth   = 16
 	wavHeaderLen  = 36

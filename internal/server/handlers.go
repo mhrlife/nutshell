@@ -89,6 +89,38 @@ func (s *Server) handleSpeak(w http.ResponseWriter, r *http.Request) {
 	_, _ = w.Write(clip.Audio)
 }
 
+// handleSummarize shortens a passage selected in a full answer, so the
+// browser can have it spoken.
+func (s *Server) handleSummarize(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		Text string `json:"text"`
+		Lang string `json:"lang"` // language the summary is to be spoken in
+	}
+
+	if err := decode(w, r, maxTextRequest, &in); err != nil {
+		writeError(w, r, http.StatusBadRequest, err)
+
+		return
+	}
+
+	if strings.TrimSpace(in.Text) == "" {
+		writeError(w, r, http.StatusBadRequest, errors.New("nothing to summarize"))
+
+		return
+	}
+
+	sum, err := s.speech.Summarize(r.Context(), in.Text, lang.Lookup(in.Lang))
+	if err != nil {
+		writeError(w, r, http.StatusBadGateway, err)
+
+		return
+	}
+
+	// text is shown, speech is what goes back to /api/speak: the same words
+	// with the speech tags the voice performs.
+	writeJSON(w, http.StatusOK, map[string]any{"text": sum.Text, "speech": sum.Speech, "cost_usd": sum.CostUSD})
+}
+
 // handleCost prices a speech generation once OpenRouter has the record.
 func (s *Server) handleCost(w http.ResponseWriter, r *http.Request) {
 	id := r.URL.Query().Get("id")
@@ -141,8 +173,9 @@ func (s *Server) handleCancel(w http.ResponseWriter, _ *http.Request) {
 // read from /api/stream.
 func (s *Server) handleAsk(w http.ResponseWriter, r *http.Request) {
 	var in struct {
-		Text string `json:"text"`
-		Lang string `json:"lang"` // language the question was asked in
+		Text      string `json:"text"`
+		Selection string `json:"selection"` // passage of an earlier answer the question is about
+		Lang      string `json:"lang"`      // language the question was asked in
 	}
 
 	if err := decode(w, r, maxTextRequest, &in); err != nil {
@@ -166,8 +199,8 @@ func (s *Server) handleAsk(w http.ResponseWriter, r *http.Request) {
 
 	// Deliberately detached from the request: this work outlives it.
 	ctx := context.WithoutCancel(r.Context())
-	turn := s.session.startTurn(in.Text)
-	req := agent.Request{Text: in.Text, Language: lang.Lookup(in.Lang)}
+	turn := s.session.startTurn(in.Text, agent.Excerpt(in.Selection))
+	req := agent.Request{Text: in.Text, Selection: in.Selection, Language: lang.Lookup(in.Lang)}
 
 	go s.runTurn(ctx, turn, req)
 

@@ -35,7 +35,7 @@ function connect() {
 // path, so a page that just reloaded cannot drift from one that never did.
 function apply(entry) {
   const { turn: id, kind, data } = entry;
-  if (kind === 'question') { addTurn(id, data.text); startWork(id, data.started); return; }
+  if (kind === 'question') { addTurn(id, data.text, data.selection); startWork(id, data.started); return; }
 
   const turn = turns.find((x) => x.id === id);
   if (!turn) { // the page and the server disagree about what exists
@@ -79,22 +79,27 @@ function tickWork() {
   setFootNote(t('workingNote').replace('{time}', elapsed));
 }
 
-// ask sends a question. The turn it starts comes back on the stream like any
-// other, so this tab draws it exactly the way a second tab would.
+// ask sends a question, together with the passage it is about when one is
+// quoted. The turn it starts comes back on the stream like any other, so this
+// tab draws it exactly the way a second tab would.
 async function ask(question) {
   question = question.trim();
   if (!question) return; // an empty box is not a failure, just nothing to send
   if (state === 'working') { warn('ask', 'stillWorking'); return; }
   stopPlayback();
+  const about = quote;
   el.input.value = '';
+  setQuote('');
   resizeInput();
   try {
     const resp = await fetch('/api/ask', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: question, lang: settings.lang }),
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text: question, selection: about, lang: settings.lang }),
     });
     if (!resp.ok) throw await httpError(resp);
-  } catch (err) { // the question never reached the agent: put the text back
+  } catch (err) { // the question never reached the agent: put it back as it was
     el.input.value = question;
+    setQuote(about);
     resizeInput();
     fail('ask', 'askFailed', err);
   }

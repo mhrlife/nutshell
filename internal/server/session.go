@@ -47,15 +47,21 @@ func newSession() *session {
 	return &session{changed: make(chan struct{})}
 }
 
-// startTurn records a question and returns the turn number the rest of that
-// turn's entries carry.
-func (s *session) startTurn(question string) int {
+// startTurn records a question, with the excerpt of the passage it is about
+// when there is one, and returns the turn number the rest of that turn's
+// entries carry.
+func (s *session) startTurn(question, selection string) int {
 	s.mu.Lock()
 	s.turns++
 	turn := s.turns
 	s.mu.Unlock()
 
-	s.add(turn, kindQuestion, map[string]any{"text": question, "started": time.Now().UnixMilli()})
+	entry := map[string]any{"text": question, "started": time.Now().UnixMilli()}
+	if selection != "" {
+		entry["selection"] = selection
+	}
+
+	s.add(turn, kindQuestion, entry)
 
 	return turn
 }

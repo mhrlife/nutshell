@@ -76,7 +76,9 @@ func run() error {
 	defer ag.Close() //nolint:errcheck // best-effort cleanup at exit
 
 	sp := speech.New(speech.Config{
-		APIKey: opts.APIKey, STTModel: opts.STTModel, TTSModel: opts.TTSModel, Voice: opts.TTSVoice, Style: speech.ResolveStyle(opts.TTSPrompt),
+		APIKey: opts.APIKey, STTModel: opts.STTModel, SummaryModel: opts.SummaryModel,
+		TTSModel: opts.TTSModel, Voice: opts.TTSVoice, Style: speech.ResolveStyle(opts.TTSPrompt),
+		Speed: opts.TTSSpeed,
 	})
 	if !sp.Enabled() {
 		slog.Warn("no OpenRouter key (set OPENROUTER_API_KEY or --openrouter-key); voice is off, typing still works")

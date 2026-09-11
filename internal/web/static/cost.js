@@ -1,9 +1,18 @@
 // Per-message and per-session cost accounting. Every turn carries
-// { stt, tts, agent } in US dollars; null means "no such call happened",
-// and agentKnown is false when the agent does not report its cost.
+// { stt, tts, summary, agent } in US dollars; null means "no such call
+// happened", and agentKnown is false when the agent does not report its cost.
+// summary is what summarizing passages of the turn's answer cost.
 
 function newCost() {
-  return { stt: null, tts: null, agent: null, agentKnown: true };
+  return { stt: null, tts: null, summary: null, agent: null, agentKnown: true };
+}
+
+// addCost charges one more call to a turn; a turn can be read aloud or
+// summarized many times over.
+function addCost(turn, kind, usd) {
+  if (!turn) return;
+  turn.cost[kind] = (turn.cost[kind] || 0) + (usd || 0);
+  renderCosts();
 }
 
 function fmtUSD(v) {
@@ -15,11 +24,11 @@ function fmtUSD(v) {
 }
 
 function costTotal(c) {
-  return (c.stt || 0) + (c.tts || 0) + (c.agent || 0);
+  return (c.stt || 0) + (c.tts || 0) + (c.summary || 0) + (c.agent || 0);
 }
 
 function costHasData(c) {
-  return c.stt !== null || c.tts !== null || c.agent !== null || !c.agentKnown;
+  return c.stt !== null || c.tts !== null || c.summary !== null || c.agent !== null || !c.agentKnown;
 }
 
 function breakdownRows(c, agentName) {
@@ -27,6 +36,7 @@ function breakdownRows(c, agentName) {
   const agentValue = c.agentKnown ? fmtUSD(c.agent === null ? 0 : c.agent) : t('costUnknown');
   return line(t('costStt'), fmtUSD(c.stt === null ? 0 : c.stt))
     + line(t('costTts'), fmtUSD(c.tts === null ? 0 : c.tts))
+    + (c.summary === null ? '' : line(t('costSummary'), fmtUSD(c.summary)))
     + line(agentName, agentValue);
 }
 
@@ -45,6 +55,7 @@ function sessionCost(turns) {
     const c = turn.cost;
     if (c.stt !== null) sum.stt = (sum.stt || 0) + c.stt;
     if (c.tts !== null) sum.tts = (sum.tts || 0) + c.tts;
+    if (c.summary !== null) sum.summary = (sum.summary || 0) + c.summary;
     if (c.agent !== null) sum.agent = (sum.agent || 0) + c.agent;
     if (!c.agentKnown) sum.agentKnown = false;
   }

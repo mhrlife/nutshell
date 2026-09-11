@@ -51,6 +51,10 @@ type Answer struct {
 type Request struct {
 	// Text is what the user asked.
 	Text string
+	// Selection is the passage of an earlier answer the question is about,
+	// as the user selected it on screen, or "" when the question stands on
+	// its own. Agents send Message rather than Text so the two arrive together.
+	Selection string
 	// Language is what the browser had selected when they asked it. A
 	// language nutshell has no rules for arrives as lang.Lookup returns it,
 	// and agents fall back to language-agnostic instructions.

@@ -16,7 +16,9 @@ let recorder = null;
 let timer = null;
 let turns = [];
 let selected = null;
-let player = null; // { audio, turn }
+// { audio, turn, clip }; clip is set, and turn null, for a passage's clip, and
+// only narration is set while a full answer plays (see narrator.js)
+let player = null;
 let pendingStt = null; // cost of the last transcription, charged to the next question
 let notice = ''; // transient message shown in the status line
 let noticeIsError = false;
@@ -41,14 +43,18 @@ function applyLanguage() {
   el.settingsBtn.innerHTML = ICONS.gear;
   el.settingsBtn.title = t('settings');
   turns.forEach(renderMeta);
+  turns.forEach((turn) => turn.clips.forEach(renderClip));
+  renderNarrator();
   renderCosts();
   renderState();
 }
 
 function renderState() {
-  const live = state !== 'idle' || !!player;
+  const live = state !== 'idle' || !!player || clipsPending > 0;
   const waiting = state === 'working' && promptPending();
-  setStatus(offline ? t('offline') : notice || (waiting ? t('promptWaiting') : player ? t('speaking') : t(state)), live);
+  const preparing = clipsPending > 0 || (player && player.narration && !player.narration.audio);
+  const idleNote = preparing ? t('loading') : player ? t('speaking') : t(state);
+  setStatus(offline ? t('offline') : notice || (waiting ? t('promptWaiting') : idleNote), live);
   el.status.classList.toggle('alert', !!notice && noticeIsError);
   el.talk.disabled = state === 'working' || state === 'transcribing';
   el.talk.classList.toggle('listening', state === 'listening');
@@ -82,12 +88,18 @@ function flash(message, isError) {
 
 // ---- turns -----------------------------------------------------------------
 
-function addTurn(id, question) {
+function addTurn(id, question, selection) {
   const node = document.getElementById('turn-template').content.firstElementChild.cloneNode(true);
-  const turn = { id, question, node, answer: null, error: null, audio: null, loadingAudio: false, cost: newCost() };
+  const turn = { id, question, node, answer: null, error: null, audio: null, loadingAudio: false, clips: [], cost: newCost() };
   turn.cost.stt = pendingStt;
   pendingStt = null;
   node.querySelector('.q').textContent = question;
+  if (selection) {
+    const about = node.querySelector('.q-quote');
+    about.textContent = oneLine(selection);
+    about.dir = isRTL(selection) ? 'rtl' : 'ltr';
+    about.hidden = false;
+  }
   el.empty.hidden = true;
   el.transcript.appendChild(node);
   turns.push(turn);
@@ -161,6 +173,7 @@ function renderDoc() {
   el.docEmpty.hidden = !!has;
   el.copy.hidden = !has;
   el.docCost.hidden = !has;
+  renderNarrator();
   if (!has) return;
   el.docBody.innerHTML = marked.parse(selected.answer.full || '');
   el.docBody.dir = isRTL(selected.answer.full) ? 'rtl' : 'ltr';
@@ -268,12 +281,18 @@ async function speak(turn) {
       turn.loadingAudio = false;
     }
   }
-  const audio = new Audio(turn.audio);
-  player = { audio, turn };
-  const refresh = () => { renderMeta(turn); renderState(); };
+  play(turn.audio, turn);
+}
+
+// play starts audio for a turn's summary, or for a passage's clip when clip
+// is given. Both keep their audio for replays.
+function play(url, turn, clip) {
+  const audio = new Audio(url);
+  player = { audio, turn, clip };
+  const refresh = () => { if (turn) renderMeta(turn); if (clip) renderClip(clip); renderState(); };
   audio.onplay = refresh;
   audio.onpause = refresh;
-  audio.onended = () => { player = null; refresh(); };
+  audio.onended = () => { if (player && player.audio === audio) player = null; refresh(); };
   audio.play();
   refresh();
 }
@@ -284,8 +303,7 @@ async function priceClip(turn, id) {
   try {
     const resp = await fetch(`/api/cost?id=${encodeURIComponent(id)}`);
     if (!resp.ok) { logIssue('warn', 'cost', errText(await httpError(resp))); return; }
-    turn.cost.tts = (await resp.json()).cost_usd || 0;
-    renderCosts();
+    addCost(turn, 'tts', (await resp.json()).cost_usd);
   } catch (err) { // the answer is fine; only its price is unknown
     logIssue('warn', 'cost', errText(err));
   }
@@ -293,10 +311,12 @@ async function priceClip(turn, id) {
 
 function stopPlayback() {
   if (!player) return;
-  const { audio, turn } = player;
+  if (player.narration) { pauseNarration(player.narration); return; } // keeps its place, to go on later
+  const { audio, turn, clip } = player;
   player = null;
   audio.pause();
-  renderMeta(turn);
+  if (turn) renderMeta(turn);
+  if (clip) renderClip(clip);
   renderState();
 }
 
@@ -329,6 +349,8 @@ document.addEventListener('keydown', (e) => {
     else if (!document.getElementById('settings').hidden) closeSettings();
     else if (state === 'listening') cancelListening();
     else if (state === 'working') fetch('/api/cancel', { method: 'POST' });
+    else if (player) stopPlayback();
+    else if (dropSelection()) return;
     else if (el.doc.classList.contains('open')) closeDoc();
     else if (typing) el.input.blur();
     return;
@@ -339,6 +361,7 @@ document.addEventListener('keydown', (e) => {
   }
   if (e.key === ' ' && !e.repeat) { e.preventDefault(); onTalk(); }
   else if (e.key === 'f' && selected && selected.answer) openDoc();
+  else if (narratorKey(e.key)) e.preventDefault();
 });
 
 el.input.addEventListener('input', resizeInput);
@@ -358,6 +381,12 @@ el.transcript.addEventListener('click', (e) => {
   const turn = turns.find((x) => x.node === node);
   if (!turn) return;
   if (e.target.closest('.speak')) { speak(turn); return; }
+  const clipButton = e.target.closest('.clip-play');
+  if (clipButton) {
+    const clip = turn.clips.find((c) => c.node.contains(clipButton));
+    if (clip) toggleClip(clip);
+    return;
+  }
   select(turn);
   if (e.target.closest('.open-full')) openDoc();
 });

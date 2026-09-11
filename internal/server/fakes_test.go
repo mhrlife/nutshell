@@ -85,6 +85,12 @@ func (f fakeSpeech) Speak(_ context.Context, _ string, l lang.Language) (speech.
 	return speech.Clip{Audio: []byte("RIFF " + l.Code), GenerationID: "gen-1"}, nil
 }
 
+func (f fakeSpeech) Summarize(_ context.Context, passage string, l lang.Language) (speech.Summary, error) {
+	text := l.Code + " summary of " + passage
+
+	return speech.Summary{Text: text, Speech: "[pause] " + text, CostUSD: 0.0003}, nil
+}
+
 func (f fakeSpeech) GenerationCost(_ context.Context, id string) (float64, error) {
 	if id != "gen-1" {
 		return 0, errors.New("unknown generation")

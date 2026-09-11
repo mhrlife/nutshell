@@ -2,9 +2,11 @@ package speech
 
 import "github.com/mhrlife/nutshell/internal/lang"
 
-// LectureStyle is the default delivery instruction placed before the spoken
-// text. Gemini TTS reads natural-language directions ahead of the transcript
-// and speaks only what follows "Transcript:".
+// LectureStyle is the built-in delivery instruction placed before the spoken
+// text. Only a voice that takes natural-language directions ahead of the
+// transcript and speaks what follows "Transcript:" can use it, such as
+// google/gemini-3.1-flash-tts-preview; x-ai/grok-voice-tts-1.0 reads every
+// word of it aloud, which is why --tts-prompt defaults to none.
 const LectureStyle = `[Professional, Fast Pace] `
 
 // SpeakInstruction returns everything put before the text to speak: how to
@@ -29,7 +31,9 @@ func SpeakInstruction(style string, l lang.Language) string {
 // back as "اسک یوزر کوشن", which the agent cannot act on. A capable model
 // gets this right on its own — google/gemini-3.8-flash does, 2.5-flash did
 // not — so treat the rule as insurance for whatever --stt-model is pointed at,
-// not as the thing carrying the feature.
+// not as the thing carrying the feature. Dedicated speech-to-text models take
+// no prompt at all, and google/chirp-3 spells exactly those words in Persian
+// letters, which is why --stt-model stays a chat model.
 const TranscribePrompt = `You are transcribing a software developer talking to a coding agent, so the
 transcript has to come out machine-usable.
 

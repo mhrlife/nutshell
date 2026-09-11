@@ -72,8 +72,10 @@ nutshell's own flags:
 | `--agent` | `claude` | Which agent to drive |
 | `--agent-bin` | | Path to the agent executable |
 | `--openrouter-key` | `$OPENROUTER_API_KEY` | OpenRouter API key |
-| `--stt-model` | `google/gemini-3.8-flash` | Speech-to-text model |
-| `--tts-model` | `google/gemini-3.1-flash-tts-preview` | Text-to-speech model |
-| `--tts-voice` | `Sadaltager` | Voice for the speech model |
-| `--tts-prompt` | `lecture` | Delivery instructions placed before the spoken text: the built-in calm lecture style, `none`, or literal text |
+| `--stt-model` | `google/gemini-3.8-flash` | Speech-to-text model (a chat model with audio input) |
+| `--summary-model` | `google/gemini-3.8-flash` | Summarizes a selected passage before it is read aloud |
+| `--tts-model` | `x-ai/grok-voice-tts-1.0` | Text-to-speech model |
+| `--tts-voice` | `rex` | Voice for the speech model (Grok: `eve`, `ara`, `rex`, `sal`, `leo`) |
+| `--tts-speed` | `1.2` | How fast the voice talks; `1` is the model's own pace (Grok accepts `0.7`–`1.5`) |
+| `--tts-prompt` | `none` | Delivery instructions placed before the spoken text, for voices that follow them (Gemini TTS does; Grok reads them aloud): `none`, the built-in calm `lecture` style, or literal text |
 | `--debug` | | Log every API call, turn and OpenRouter request (`--verbose` stays the agent's own flag) |

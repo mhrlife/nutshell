@@ -14,7 +14,7 @@ import (
 // nutshell knows keeps none of them well. Implementations pass the result to
 // their agent in whatever way that agent accepts extra instructions.
 func AnswerPrompt(l lang.Language) string {
-	return answerFormat + "\n\n" + languageRules(l) + "\n\n" + answerScope
+	return answerFormat + "\n\n" + languageRules(l) + "\n\n" + answerScope + "\n\n" + selectionNote
 }
 
 // languageRules is the part of the prompt that changes with the language: the
