@@ -21,6 +21,7 @@ function connect() {
   };
   stream.addEventListener('synced', () => {
     synced = true;
+    resumeThread(); // back to the thread the conversation was in when it stopped
     if (offline) { offline = false; renderState(); }
   });
   stream.onerror = () => {
@@ -34,8 +35,17 @@ function connect() {
 // apply draws one thing that happened. Replayed and live events take the same
 // path, so a page that just reloaded cannot drift from one that never did.
 function apply(entry) {
-  const { turn: id, kind, data } = entry;
-  if (kind === 'question') { addTurn(id, data.text, data.selection); startWork(id, data.started); return; }
+  const { turn: id, kind, data, thread } = entry;
+  if (kind === 'thread') { openThread(thread, data); return; }
+  if (kind === 'thread_done') { finishThread(thread, data); return; }
+
+  if (kind === 'question') {
+    noteThread(thread);
+    addTurn(id, thread, data);
+    startWork(id, data.started);
+
+    return;
+  }
 
   const turn = turns.find((x) => x.id === id);
   if (!turn) { // the page and the server disagree about what exists
@@ -80,26 +90,32 @@ function tickWork() {
 }
 
 // ask sends a question, together with the passage it is about when one is
-// quoted. The turn it starts comes back on the stream like any other, so this
-// tab draws it exactly the way a second tab would.
+// quoted. It goes to the thread on screen, unless the side-thread button is
+// armed, in which case it opens one. The turn it starts comes back on the
+// stream like any other, so this tab draws it exactly the way a second tab
+// would — and so does the side thread, if one was opened.
 async function ask(question) {
   question = question.trim();
   if (!question) return; // an empty box is not a failure, just nothing to send
   if (state === 'working') { warn('ask', 'stillWorking'); return; }
+  if (inClosedThread()) { warn('ask', 'threadIsClosed'); return; }
   stopPlayback();
   const about = quote;
+  const fork = forking();
   el.input.value = '';
   setQuote('');
+  spendFork();
   resizeInput();
   try {
     const resp = await fetch('/api/ask', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text: question, selection: about, lang: settings.lang }),
+      body: JSON.stringify({ text: question, selection: about, lang: settings.lang, thread: current, fork }),
     });
     if (!resp.ok) throw await httpError(resp);
   } catch (err) { // the question never reached the agent: put it back as it was
     el.input.value = question;
     setQuote(about);
+    setFork(fork);
     resizeInput();
     fail('ask', 'askFailed', err);
   }

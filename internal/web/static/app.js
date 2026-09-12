@@ -6,7 +6,7 @@ const $ = (s) => document.querySelector(s);
 const el = {
   transcript: $('#transcript'), empty: $('#empty'), emptyHint: $('#empty-hint'),
   status: $('#status'), brand: $('#brand'), input: $('#input'), talk: $('#talk'),
-  settingsBtn: $('#settings-btn'), foot: $('#foot'), footNote: $('#foot-note'), doc: $('#doc'), docBody: $('#doc-body'),
+  settingsBtn: $('#settings-btn'), fork: $('#fork'), foot: $('#foot'), footNote: $('#foot-note'), doc: $('#doc'), docBody: $('#doc-body'),
   docEmpty: $('#doc-empty'), docCost: $('#doc-cost'), copy: $('#copy'), docClose: $('#doc-close'),
 };
 
@@ -44,6 +44,7 @@ function applyLanguage() {
   el.settingsBtn.title = t('settings');
   turns.forEach(renderMeta);
   turns.forEach((turn) => turn.clips.forEach(renderClip));
+  renderThreads();
   renderNarrator();
   renderUnsent();
   renderCosts();
@@ -57,14 +58,18 @@ function renderState() {
   const idleNote = preparing ? t('loading') : player ? t('speaking') : t(state);
   setStatus(offline ? t('offline') : notice || (waiting ? t('promptWaiting') : idleNote), live);
   el.status.classList.toggle('alert', !!notice && noticeIsError);
-  el.talk.disabled = state === 'working' || state === 'transcribing';
+  const readOnly = inClosedThread(); // a finished thread is there to be read, not asked
+  el.input.disabled = readOnly;
+  el.fork.disabled = readOnly;
+  el.talk.disabled = readOnly || state === 'working' || state === 'transcribing';
   el.talk.classList.toggle('listening', state === 'listening');
   el.talk.classList.toggle('transcribing', state === 'transcribing');
   el.talk.innerHTML = { listening: ICONS.stop, transcribing: ICONS.spinner }[state] || ICONS.mic;
   el.talk.title = state === 'listening' ? t('listening') : t('speak');
   el.foot.dataset.state = state;
   setFootNote(waiting ? t('promptNote')
-    : { listening: t('listenNote'), transcribing: t('transcribingNote') }[state] || '');
+    : { listening: t('listenNote'), transcribing: t('transcribingNote') }[state]
+    || (forking() ? t('forkOnNote') : ''));
   if (state === 'idle') resizeInput();
 }
 
@@ -89,22 +94,28 @@ function flash(message, isError) {
 
 // ---- turns -----------------------------------------------------------------
 
-function addTurn(id, question, selection) {
+// addTurn draws a question in the thread it was asked in. A turn belongs to
+// its thread for good: what is on screen is the thread being read, and every
+// other one is merely hidden.
+function addTurn(id, thread, data) {
   const node = document.getElementById('turn-template').content.firstElementChild.cloneNode(true);
-  const turn = { id, question, node, answer: null, error: null, audio: null, loadingAudio: false, clips: [], cost: newCost() };
+  const question = data.closing ? t('threadSummingUp') : data.text;
+  const turn = { id, thread: thread || ROOT, question, closing: !!data.closing, node, answer: null, error: null, audio: null, loadingAudio: false, clips: [], cost: newCost() };
   turn.cost.stt = pendingStt;
   pendingStt = null;
+  node.dataset.thread = turn.thread;
+  node.classList.toggle('closing', !!data.closing);
   node.querySelector('.q').textContent = question;
-  if (selection) {
+  if (data.selection) {
     const about = node.querySelector('.q-quote');
-    about.textContent = oneLine(selection);
-    about.dir = isRTL(selection) ? 'rtl' : 'ltr';
+    about.textContent = oneLine(data.selection);
+    about.dir = isRTL(data.selection) ? 'rtl' : 'ltr';
     about.hidden = false;
   }
-  el.empty.hidden = true;
   el.transcript.appendChild(node);
   turns.push(turn);
-  select(turn);
+  if (turn.thread === current) select(turn);
+  applyThreads();
   return turn;
 }
 
@@ -133,7 +144,10 @@ function finishTurn(turn, answer) {
   renderCosts();
   if (selected === turn) renderDoc();
   scrollToEnd();
-  if (synced && settings.autoSpeak && cfg.voice) speak(turn);
+  // A side thread's conclusion is not read aloud: you just heard the thread
+  // it came from, and the next thing on screen is the thread above. It is
+  // still there to be played from its own button.
+  if (synced && settings.autoSpeak && cfg.voice && !turn.closing) speak(turn);
 }
 
 function failTurn(turn, message) {
@@ -146,6 +160,8 @@ function failTurn(turn, message) {
 }
 
 function renderMeta(turn) {
+  // nutshell wrote this question itself, so it follows the interface language
+  if (turn.closing) turn.node.querySelector('.q').textContent = t('threadSummingUp');
   if (!turn.answer) return;
   const speakBtn = turn.node.querySelector('.speak');
   const playing = player && player.turn === turn && !player.audio.paused;
@@ -337,6 +353,7 @@ document.addEventListener('keydown', (e) => {
     else if (state === 'working') fetch('/api/cancel', { method: 'POST' });
     else if (player) stopPlayback();
     else if (dropSelection()) return;
+    else if (forking()) setFork(false);
     else if (el.doc.classList.contains('open')) closeDoc();
     else if (typing) el.input.blur();
     return;
@@ -347,6 +364,7 @@ document.addEventListener('keydown', (e) => {
   }
   if (e.key === ' ' && !e.repeat) { e.preventDefault(); onTalk(); }
   else if (e.key === 'f' && selected && selected.answer) openDoc();
+  else if (e.key === 'b') toggleFork();
   else if (narratorKey(e.key)) e.preventDefault();
 });
 

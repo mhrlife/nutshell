@@ -1,0 +1,91 @@
+/* Side threads: the trail that says how deep you are, the line left in the
+   thread above where one was opened, and the bar that closes one. None of it
+   is on screen until a side thread exists. */
+
+.trail {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 2px 28px 10px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.crumb { border-radius: 4px; padding: 2px 6px; max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; unicode-bidi: plaintext; }
+
+.crumb:hover:not(:disabled) { color: var(--ink); background: rgba(42, 38, 34, 0.06); }
+
+.crumb:disabled { color: var(--ink-2); cursor: default; }
+
+html[dir="rtl"] .crumb { font-family: var(--fa); }
+
+.trail-sep { font-style: normal; color: var(--muted-2); }
+
+.trail-sep::before { content: '›'; }
+
+html[dir="rtl"] .trail-sep::before { content: '‹'; }
+
+/* where a side thread was opened, in the thread it was opened from */
+.side {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-inline-start: 14px;
+  border-inline-start: 2px dashed var(--muted-2);
+  cursor: pointer;
+}
+
+.side:hover { border-inline-start-color: var(--accent); }
+
+.side-head { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+
+.side-label {
+  flex-shrink: 0;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted-2);
+}
+
+html[dir="rtl"] .side-label { letter-spacing: 0; text-transform: none; font-family: var(--fa); }
+
+.side-title { min-width: 0; font-size: 13px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; unicode-bidi: plaintext; text-align: start; }
+
+.side.closed { border-inline-start-style: solid; }
+
+.side.closed .side-label { color: var(--accent); }
+
+/* what the side thread settled, which is all the thread above ever hears */
+.side-note { font-size: 14px; line-height: 1.6; color: var(--ink-2); text-wrap: pretty; unicode-bidi: plaintext; text-align: start; }
+
+.side-note:dir(rtl) { font-family: var(--fa); }
+
+.side-note:dir(ltr) { font-family: var(--serif), var(--fa); }
+
+/* nutshell's own question, asking a thread what it settled */
+.turn.closing .q { font-style: normal; color: var(--muted-2); }
+
+/* finishing the thread on screen */
+.thread-bar { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; padding-inline-start: 10px; border-inline-start: 2px solid var(--muted-2); }
+
+.thread-note { flex: 1; min-width: 0; font-size: 12px; color: var(--muted); }
+
+.thread-bar button { font-size: 12px; padding: 4px 10px; border-radius: 6px; border: 1px solid var(--line); background: var(--paper); color: var(--ink-2); white-space: nowrap; }
+
+.thread-bar button:hover { border-color: var(--accent); color: var(--accent); }
+
+.thread-done { border-color: var(--muted-2) !important; }
+
+html[dir="rtl"] .thread-bar button { font-family: var(--fa); }
+
+/* the button that arms the next question to go off on its own */
+#fork.on { color: var(--accent); background: rgba(154, 74, 30, 0.1); }
+
+.rail-foot[data-state="listening"] #fork,
+.rail-foot[data-state="transcribing"] #fork,
+.rail-foot[data-state="working"] #fork { display: none; }
+
+#input:disabled { opacity: 0.5; cursor: default; }
+
+#fork:disabled { opacity: 0.4; cursor: default; }

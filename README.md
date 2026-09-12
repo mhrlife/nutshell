@@ -79,3 +79,29 @@ nutshell's own flags:
 | `--tts-speed` | `1.2` | How fast the voice talks; `1` is the model's own pace (Grok accepts `0.7`–`1.5`) |
 | `--tts-prompt` | `none` | Delivery instructions placed before the spoken text, for voices that follow them (Gemini TTS does; Grok reads them aloud): `none`, the built-in calm `lecture` style, or literal text |
 | `--debug` | | Log every API call, turn and OpenRouter request (`--verbose` stays the agent's own flag) |
+
+## Side threads
+
+One answer often raises three questions of its own. Asking them where you are
+buries the thread you were following, so nutshell lets a question go off on
+its own: select the term you are wondering about and pick **ask separately**,
+or arm the branch button next to the input (`b`) and ask.
+
+That opens a side thread. It starts out knowing everything said so far — it
+forks the agent's session, rather than starting from nothing — but nothing
+asked in it ever reaches the conversation it came from. Side threads can be
+opened from side threads, as deep as you like; the trail at the top says where
+you are, and a line in the thread above marks where each one was opened.
+
+When you are done, **got what I needed** asks the side thread to sum up what
+it settled and takes that one paragraph back with it, where it rides along
+with your next question as something the agent already knows. **Just leave
+it** closes the thread and carries nothing.
+
+```mermaid
+flowchart TD
+    Main[Main thread] -->|ask separately| Side[Side thread<br/>forked, knows everything so far]
+    Side -->|deeper still| Deeper[Another side thread]
+    Deeper -->|conclusion| Side
+    Side -->|conclusion, if you want it| Main
+```

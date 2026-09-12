@@ -31,12 +31,14 @@ func Excerpt(passage string) string {
 }
 
 // Message is what the agent is sent for r: the question, preceded by the
-// passage it is about when there is one.
+// passage it is about when there is one, and by what any side thread the user
+// finished since the last question concluded.
 func (r Request) Message() string {
-	passage := Excerpt(r.Selection)
-	if passage == "" {
-		return r.Text
+	message := notesBlock(r.Notes)
+
+	if passage := Excerpt(r.Selection); passage != "" {
+		message += "<selected_text>\n" + passage + "\n</selected_text>\n\n"
 	}
 
-	return "<selected_text>\n" + passage + "\n</selected_text>\n\n" + r.Text
+	return message + r.Text
 }

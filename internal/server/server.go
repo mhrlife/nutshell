@@ -46,6 +46,7 @@ type Server struct {
 	busy     atomic.Bool
 	prompts  *promptDesk
 	session  *session
+	threads  *threads
 }
 
 // New wires the routes. static serves the UI (index.html at its root), and
@@ -53,7 +54,7 @@ type Server struct {
 func New(ag agent.Agent, sp Speech, st Settings, static http.FileSystem, cfg Config, logger *slog.Logger) *Server {
 	s := &Server{
 		agent: ag, speech: sp, settings: st, cfg: cfg, logger: logger,
-		prompts: newPromptDesk(), session: newSession(logger),
+		prompts: newPromptDesk(), session: newSession(logger), threads: newThreads(),
 	}
 
 	mux := http.NewServeMux()
@@ -64,6 +65,7 @@ func New(ag agent.Agent, sp Speech, st Settings, static http.FileSystem, cfg Con
 	mux.HandleFunc("POST /api/ask", s.handleAsk)
 	mux.HandleFunc("POST /api/answer", s.handleAnswer)
 	mux.HandleFunc("POST /api/cancel", s.handleCancel)
+	mux.HandleFunc("POST /api/close", s.handleClose)
 	mux.HandleFunc("POST /api/speak", s.handleSpeak)
 	mux.HandleFunc("POST /api/summarize", s.handleSummarize)
 	mux.HandleFunc("GET /api/cost", s.handleCost)
