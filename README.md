@@ -46,6 +46,26 @@ Two more things before the first run:
 
    Without it the UI still works with typed messages; voice is switched off.
 
+## Behind a wrapper CLI
+
+Not everyone starts `claude` directly. A team may have a host CLI that
+configures a Claude Code session first — a system prompt, an MCP set, a
+sandbox — and starts the CLI itself. `--agent claude-wrapper` drives Claude
+Code through such a host:
+
+```sh
+nutshell --agent claude-wrapper --agent-bin "divar-copilot agent"
+```
+
+What a host has to do for this to work:
+
+- render `-p`, `--input-format stream-json`, `--output-format stream-json` and
+  `--verbose` itself, so nutshell does not pass them a second time;
+- accept `--resume <id>` among its own flags, ahead of a `--` separator: the
+  host is what resolves the session's working directory from that id;
+- forward everything after `--` to Claude Code unchanged, so nutshell can still
+  pass `--append-system-prompt`, `--permission-prompt-tool` and your own flags.
+
 ## Run
 
 ```sh
@@ -69,8 +89,8 @@ nutshell's own flags:
 | `--port` | `0` (random) | Port for the web UI |
 | `--no-open` | | Don't open the browser |
 | `--lang` | `en` | Default UI language (`en` or `fa`) |
-| `--agent` | `claude` | Which agent to drive |
-| `--agent-bin` | | Path to the agent executable |
+| `--agent` | `claude` | Which agent to drive: `claude`, or `claude-wrapper` for a host CLI that starts Claude Code for us |
+| `--agent-bin` | | Path to the agent executable; for `claude-wrapper`, the host command and its subcommand |
 | `--openrouter-key` | `$OPENROUTER_API_KEY` | OpenRouter API key |
 | `--stt-model` | `google/gemini-3.8-flash` | Speech-to-text model (a chat model with audio input) |
 | `--summary-model` | `google/gemini-3.8-flash` | Summarizes a selected passage before it is read aloud |
