@@ -45,7 +45,10 @@ function pathTo(id) {
 function openThread(parent, data) {
   if (threadList.has(data.id)) return;
   const node = document.getElementById('thread-template').content.firstElementChild.cloneNode(true);
-  const thread = { id: data.id, parent, title: data.title || '', closed: false, marker: node };
+  const thread = {
+    id: data.id, parent, title: data.title || '', question: data.question || '',
+    closed: false, closing: false, marker: node,
+  };
   threadList.set(thread.id, thread);
   node.dataset.thread = parent;
   node.dataset.id = thread.id;
@@ -61,6 +64,7 @@ function finishThread(parent, data) {
   const thread = threadList.get(data.id);
   if (!thread) { logIssue('warn', 'thread', `a thread this page never saw finished (${data.id})`); return; }
   thread.closed = true;
+  thread.closing = false;
   thread.conclusion = data.conclusion || '';
   renderMarker(thread);
   if (synced) { if (current === thread.id) enterThread(parent); }
@@ -136,14 +140,23 @@ async function finishHere(inject) {
   if (thread.closed) { enterThread(thread.parent); return; }
   if (inject && state === 'working') { warn('close', 'stillWorking'); return; }
   setFork(false);
+  thread.closing = true; // asked once is enough: the buttons go before the answer does
+  renderThreadBar();
   try {
     await postJSON('/api/close', { thread: thread.id, inject: !!inject, lang: settings.lang });
   } catch (err) {
+    closingFailed(thread.id);
     fail('close', 'closeFailed', err);
-    return;
   }
-  if (!inject) return; // closing without a conclusion is done the moment it is recorded
-  renderThreadBar(); // the closing turn is running; the way up opens when it lands
+}
+
+// closingFailed puts the thread back the way it was when nothing came of
+// closing it, so it can be carried on or finished again.
+function closingFailed(id) {
+  const thread = threadList.get(id);
+  if (!thread || !thread.closing) return;
+  thread.closing = false;
+  if (current === id) renderThreadBar();
 }
 
 // ---- drawing ---------------------------------------------------------------
@@ -162,14 +175,21 @@ function renderMarker(thread) {
   note.hidden = !thread.conclusion;
 }
 
-// crumbLabel keeps the trail readable at a glance: a few words of what the
-// thread is about, never the whole question it started with.
+// crumbLabel keeps the trail readable at a glance: the first few words of
+// what you asked there, which is what you remember the thread by — not the
+// passage you happened to have selected when you opened it.
 function crumbLabel(thread) {
   if (thread.id === ROOT) return t('threadMain');
-  const title = oneLine(thread.title);
-  if (!title) return t('threadUntitled');
-  return title.length > 36 ? `${title.slice(0, 36)}…` : title;
+  const said = oneLine(thread.question || thread.title);
+  if (!said) return t('threadUntitled');
+  const words = said.split(' ').slice(0, crumbWords).join(' ');
+  const short = words.length > crumbChars ? words.slice(0, crumbChars) : words;
+  return short.length < said.length ? `${short.trim()}…` : short;
 }
+
+// How much of a question the trail keeps: whichever runs out first.
+const crumbWords = 5;
+const crumbChars = 36;
 
 function renderTrail() {
   const path = pathTo(current);
@@ -193,13 +213,15 @@ function renderThreadBar() {
   const thread = currentThread();
   threadBar.hidden = !inSideThread();
   if (threadBar.hidden) return;
-  const closed = thread.closed;
-  threadBar.querySelector('.thread-note').textContent = closed ? t('threadIsClosed') : t('threadHere');
+  const { closed, closing } = thread;
+  const note = closing ? t('threadWrappingUp') : (closed ? t('threadIsClosed') : t('threadHere'));
+  threadBar.querySelector('.thread-note').textContent = note;
   const done = threadBar.querySelector('.thread-done');
   const drop = threadBar.querySelector('.thread-drop');
+  done.hidden = closing;
   done.textContent = closed ? t('threadBack') : t('threadDone');
   done.title = closed ? '' : t('threadDoneNote');
-  drop.hidden = closed;
+  drop.hidden = closed || closing;
   drop.textContent = t('threadDrop');
   drop.title = t('threadDropNote');
 }

@@ -93,7 +93,14 @@ func (s *Server) threadFor(thread string, fork bool, selection, text string) (st
 		return "", err
 	}
 
-	s.session.mark(thread, kindThread, map[string]any{"id": id, "title": s.threads.title(id)})
+	// The title says what the side thread is about — the passage, when it was
+	// opened from one. The question goes along with it because that is what
+	// the trail shows: your own words, not a passage you only pointed at.
+	s.session.mark(thread, kindThread, map[string]any{
+		"id":       id,
+		"title":    s.threads.title(id),
+		"question": trimTitle(text),
+	})
 
 	return id, nil
 }

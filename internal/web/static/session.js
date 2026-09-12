@@ -58,7 +58,11 @@ function apply(entry) {
   else if (kind === 'prompt') showPrompt(data, (promptId, choices) => answerPrompt(turn, data, promptId, choices));
   else if (kind === 'prompt_done') closePrompt(data.id);
   else if (kind === 'result') { finishTurn(turn, data); stopWork(id); }
-  else if (kind === 'error') { failTurn(turn, data.code === 'cancelled' ? t('cancelled') : data.message); stopWork(id); }
+  else if (kind === 'error') {
+    failTurn(turn, data.code === 'cancelled' ? t('cancelled') : data.message);
+    closingFailed(thread); // a turn that failed settled nothing, closing turn or not
+    stopWork(id);
+  }
 }
 
 // startWork shows the turn in progress — a new one, or the one a reload
