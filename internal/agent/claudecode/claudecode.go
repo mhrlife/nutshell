@@ -14,7 +14,6 @@ import (
 	"io"
 	"log/slog"
 	"os/exec"
-	"slices"
 	"strings"
 	"sync"
 
@@ -30,7 +29,8 @@ const (
 
 // Agent drives one Claude Code process.
 type Agent struct {
-	bin       string
+	argv      []string
+	launch    Launch
 	extraArgs []string
 	logger    *slog.Logger
 
@@ -72,16 +72,23 @@ func (p *process) send(v any) error {
 	return err
 }
 
-// New returns an agent that runs bin (normally "claude") in the current
-// directory. extraArgs are appended to the command line unchanged, so callers
-// can forward flags such as --model or --mcp-config. logger receives what the
-// agent logs.
-func New(bin string, extraArgs []string, logger *slog.Logger) *Agent {
-	return &Agent{bin: bin, extraArgs: extraArgs, logger: logger}
+// New returns an agent that runs argv (normally ["claude"]) in the current
+// directory. launch says whether argv is the Claude Code CLI itself or a host
+// CLI that starts it. extraArgs are appended to the Claude Code flags
+// unchanged, so callers can forward flags such as --model or --mcp-config.
+// logger receives what the agent logs.
+func New(argv []string, launch Launch, extraArgs []string, logger *slog.Logger) *Agent {
+	return &Agent{argv: argv, launch: launch, extraArgs: extraArgs, logger: logger}
 }
 
 // Name implements agent.Agent.
-func (a *Agent) Name() string { return "claude code" }
+func (a *Agent) Name() string {
+	if a.launch == WrapperLaunch {
+		return "claude code via " + a.argv[0]
+	}
+
+	return "claude code"
+}
 
 // SessionID returns the Claude Code session id once one is known.
 func (a *Agent) SessionID() string {
@@ -169,56 +176,11 @@ func (a *Agent) ensureProcess(ctx context.Context, l lang.Language) (*process, e
 	return a.proc, nil
 }
 
-// defaultPermissionMode is the mode nutshell asks for when the user has not
-// picked one. Outside a terminal claude falls back to "default", which stops
-// for every write and every bash command it does not consider harmless;
-// interactive sessions get "auto" and its classifier, and so should we.
-const defaultPermissionMode = "auto"
-
-// permissionModeFlags are the agent flags that decide the permission mode.
-var permissionModeFlags = []string{
-	"--permission-mode",
-	"--inherit-permission-mode",
-	"--dangerously-skip-permissions",
-}
-
-// setsPermissionMode reports whether the user's own flags already choose a
-// permission mode, in which case nutshell leaves that choice alone.
-func setsPermissionMode(args []string) bool {
-	for _, arg := range args {
-		name, _, _ := strings.Cut(arg, "=")
-		if slices.Contains(permissionModeFlags, name) {
-			return true
-		}
-	}
-
-	return false
-}
-
 func (a *Agent) startLocked() (*process, error) {
-	args := []string{
-		"-p",
-		"--input-format", "stream-json",
-		"--output-format", "stream-json",
-		"--verbose",
-		"--append-system-prompt", agent.Instructions(a.language),
-		// Route permission requests and questions to us over stdio instead
-		// of letting claude deny them for want of anyone to ask.
-		"--permission-prompt-tool", "stdio",
-	}
-
-	if !setsPermissionMode(a.extraArgs) {
-		args = append(args, "--permission-mode", defaultPermissionMode)
-	}
-
-	if a.sessionID != "" {
-		args = append(args, "--resume", a.sessionID)
-	}
-
-	args = append(args, a.extraArgs...)
+	argv := a.command()
 
 	ctx, stop := context.WithCancel(context.Background())
-	cmd := exec.CommandContext(ctx, a.bin, args...) //nolint:gosec // running the user's own agent with the flags they passed
+	cmd := exec.CommandContext(ctx, argv[0], argv[1:]...) //nolint:gosec // running the user's own agent with the flags they passed
 
 	stdin, err := cmd.StdinPipe()
 	if err != nil {

@@ -9,7 +9,9 @@ the same interface). Go, standard library only; the browser UI is embedded.
   start the server.
 - `internal/agent` – the `Agent` interface plus the shared answer format
   (`Instructions`, `ParseAnswer`). New agents go in `internal/agent/<name>`.
-- `internal/agent/claudecode` – Claude Code implementation.
+- `internal/agent/claudecode` – Claude Code implementation. `Launch` picks how
+  the CLI is reached: `DirectLaunch` runs it, `WrapperLaunch` runs a host CLI
+  that starts it for us. `launch.go` owns the argv for both.
 - `internal/lang` – per-language rules for the agent, the transcriber and the
   voice. The browser sends its language code with every request; instructions
   are built from the entry for that code, never from all of them at once.

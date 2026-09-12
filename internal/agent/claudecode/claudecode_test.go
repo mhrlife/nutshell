@@ -90,7 +90,7 @@ func TestHandleEventResult(t *testing.T) {
 func TestChargeTurnUsesDeltas(t *testing.T) {
 	t.Parallel()
 
-	a := New("claude", nil, slog.New(slog.DiscardHandler))
+	a := New([]string{claudeBin}, DirectLaunch, nil, slog.New(slog.DiscardHandler))
 
 	first := agent.Answer{CostUSD: 0.010, CostKnown: true}
 	a.chargeTurn(&first)
