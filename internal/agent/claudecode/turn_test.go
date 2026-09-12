@@ -18,15 +18,20 @@ type watcher struct {
 	opened  []agent.Thread
 	answers []agent.Answer
 	errs    []error
+	begun   chan struct{}
 	done    chan struct{}
 }
 
-func newWatcher() *watcher { return &watcher{done: make(chan struct{}, 4)} }
+func newWatcher() *watcher {
+	return &watcher{begun: make(chan struct{}, 4), done: make(chan struct{}, 4)}
+}
 
 func (w *watcher) Begin(thread agent.Thread) (agent.Handler, func(agent.Answer, error)) {
 	w.mu.Lock()
 	w.opened = append(w.opened, thread)
 	w.mu.Unlock()
+
+	w.begun <- struct{}{}
 
 	return agent.ProgressFunc(func(agent.Event) {}), func(answer agent.Answer, err error) {
 		w.mu.Lock()
@@ -35,6 +40,19 @@ func (w *watcher) Begin(thread agent.Thread) (agent.Handler, func(agent.Answer, 
 		w.mu.Unlock()
 
 		w.done <- struct{}{}
+	}
+}
+
+// awaitBegun waits for a turn of the agent's own to have been opened. Events
+// are buffered on their way to the reader, so a test that wants to act on a
+// turn already under way has to know that the reader has got there.
+func (w *watcher) awaitBegun(t *testing.T) {
+	t.Helper()
+
+	select {
+	case <-w.begun:
+	case <-time.After(2 * time.Second):
+		t.Fatal("the agent never opened a turn of its own")
 	}
 }
 
@@ -149,6 +167,8 @@ func TestQuestionWaitsForATurnClaudeTookOnItsOwn(t *testing.T) {
 	events <- streamEvent{Type: typeSystem, Subtype: subtypeInit}
 
 	events <- streamEvent{Type: typeAssistant, Message: json.RawMessage(`{"content":[{"type":"text","text":"the task finished"}]}`)}
+
+	seen.awaitBegun(t)
 
 	claimed := make(chan error, 1)
 	asked := newTurn(agent.ProgressFunc(func(agent.Event) {}))
