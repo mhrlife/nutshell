@@ -54,7 +54,7 @@ func TestHandleEventReportsProgress(t *testing.T) {
 	progress := func(e agent.Event) { events = append(events, e) }
 
 	assistant := streamEvent{
-		Type:    "assistant",
+		Type:    typeAssistant,
 		Message: json.RawMessage(`{"content":[{"type":"tool_use","name":"Read","input":{"file_path":"a.go"}},{"type":"text","text":"Looking."}]}`),
 	}
 	if _, done, err := handleEvent(assistant, progress); done || err != nil {
@@ -70,7 +70,7 @@ func TestHandleEventResult(t *testing.T) {
 	t.Parallel()
 
 	progress := func(agent.Event) {}
-	result := streamEvent{Type: "result", Result: "<summary>S</summary><full>F</full>", TotalCostUSD: 0.5}
+	result := streamEvent{Type: typeResult, Result: "<summary>S</summary><full>F</full>", TotalCostUSD: 0.5}
 
 	answer, done, err := handleEvent(result, progress)
 	if !done || err != nil {
@@ -81,7 +81,7 @@ func TestHandleEventResult(t *testing.T) {
 		t.Errorf("answer = %+v", answer)
 	}
 
-	failed := streamEvent{Type: "result", IsError: true, Result: "boom"}
+	failed := streamEvent{Type: typeResult, IsError: true, Result: "boom"}
 	if _, done, err := handleEvent(failed, progress); !done || err == nil {
 		t.Errorf("error result: done=%v err=%v", done, err)
 	}

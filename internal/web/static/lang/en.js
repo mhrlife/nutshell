@@ -85,6 +85,7 @@ registerLanguage({
     threadDropNote: 'Finish here and keep all of it out of the conversation above',
     threadBack: 'Back up',
     threadSummingUp: 'What did this settle?',
+    backgroundDone: 'Work it started in the background is done',
     closeFailed: 'could not finish this conversation: {error}',
     quoteClear: 'remove the quote',
     summaryFailed: 'could not summarize this: {error}',

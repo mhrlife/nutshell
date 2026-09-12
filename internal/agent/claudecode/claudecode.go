@@ -8,6 +8,11 @@
 // one process runs at a time, so a question asked on another thread replaces
 // it with one resuming that thread's session — and a side thread's first
 // question forks the session of the thread it came from.
+//
+// The process's stream is read from end to end by one goroutine, not only
+// while a question is outstanding: claude answers twice when a background
+// task it started finishes, and that second answer belongs to no question.
+// turn.go does that reading and says where each turn's events go.
 package claudecode
 
 import (
@@ -39,10 +44,11 @@ type Agent struct {
 	extraArgs []string
 	logger    *slog.Logger
 
-	turn sync.Mutex // serializes Ask calls
+	asking sync.Mutex // serializes Ask calls
 
 	mu        sync.Mutex // guards the fields below
 	proc      *process
+	unasked   agent.Unasked     // where turns claude took on its own are reported
 	language  lang.Language     // the language proc's system prompt was built for
 	thread    agent.Thread      // the thread proc is carrying on
 	sessions  map[string]string // session id of every thread asked something so far
@@ -61,6 +67,10 @@ type process struct {
 	events  <-chan streamEvent
 	stderr  *tailBuffer
 	stop    context.CancelFunc
+
+	turnMu sync.Mutex    // guards the two fields below
+	turn   *turn         // the turn the stream is carrying, nil between turns
+	freed  chan struct{} // closed and replaced every time a turn ends
 }
 
 // send writes one newline-terminated JSON message to the process.
@@ -108,6 +118,14 @@ func (a *Agent) SessionID(thread agent.Thread) string {
 	return a.sessions[thread.Name()]
 }
 
+// Watch implements agent.Agent.
+func (a *Agent) Watch(u agent.Unasked) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
+	a.unasked = u
+}
+
 // Cancel implements agent.Agent.
 func (a *Agent) Cancel() {
 	a.mu.Lock()
@@ -136,16 +154,30 @@ func (a *Agent) stopLocked() {
 
 // Ask implements agent.Agent.
 func (a *Agent) Ask(ctx context.Context, req agent.Request, h agent.Handler) (agent.Answer, error) {
-	a.turn.Lock()
-	defer a.turn.Unlock()
+	a.asking.Lock()
+	defer a.asking.Unlock()
 	defer a.withdrawAllPrompts()
+
+	// A turn claude took on its own may still be running on the process this
+	// question is about to use — or to replace. Wait it out: two turns cannot
+	// share one stream, and a process killed halfway through one loses it.
+	if err := a.settle(ctx); err != nil {
+		return agent.Answer{}, err
+	}
 
 	proc, err := a.ensureProcess(ctx, req.Language, req.Thread)
 	if err != nil {
 		return agent.Answer{}, err
 	}
 
+	t := newTurn(h)
+	if err := proc.claim(ctx, t); err != nil {
+		return agent.Answer{}, err
+	}
+
 	if err := proc.send(userMessage(req.Message())); err != nil {
+		proc.release() // the question never arrived, so this turn never starts
+
 		a.mu.Lock()
 		a.stopLocked()
 		a.mu.Unlock()
@@ -153,7 +185,33 @@ func (a *Agent) Ask(ctx context.Context, req agent.Request, h agent.Handler) (ag
 		return agent.Answer{}, fmt.Errorf("sending question to claude: %w", err)
 	}
 
-	return a.awaitResult(ctx, proc, h)
+	return a.await(ctx, t)
+}
+
+// settle waits for the running process, if there is one, to be between turns.
+func (a *Agent) settle(ctx context.Context) error {
+	a.mu.Lock()
+	proc := a.proc
+	a.mu.Unlock()
+
+	if proc == nil {
+		return nil
+	}
+
+	return proc.idle(ctx)
+}
+
+// await blocks until the turn ends: with the answer claude reached, with the
+// error that stopped it, or because the user gave up on it.
+func (a *Agent) await(ctx context.Context, t *turn) (agent.Answer, error) {
+	select {
+	case <-ctx.Done():
+		a.Cancel()
+
+		return agent.Answer{}, ctx.Err()
+	case done := <-t.done:
+		return done.answer, done.err
+	}
 }
 
 // ensureProcess returns the running process, starting one when there is none
@@ -226,7 +284,14 @@ func (a *Agent) startLocked() (*process, error) {
 
 	go readEvents(cmd, stdout, events)
 
-	proc := &process{cmd: cmd, stdin: stdin, events: events, stderr: stderr, stop: stop}
+	proc := &process{
+		cmd: cmd, stdin: stdin, events: events, stderr: stderr, stop: stop,
+		freed: make(chan struct{}),
+	}
+
+	// ctx ends when the process does, which is what withdraws the questions
+	// it left on screen.
+	go a.pump(ctx, proc)
 	// Announce ourselves as the host that answers control requests. Claude
 	// Code carries on without this, so a failure here is not fatal.
 	_ = proc.send(map[string]any{
@@ -267,46 +332,10 @@ func userMessage(text string) map[string]any {
 	}
 }
 
-func (a *Agent) awaitResult(ctx context.Context, proc *process, h agent.Handler) (agent.Answer, error) {
-	for {
-		select {
-		case <-ctx.Done():
-			a.Cancel()
-
-			return agent.Answer{}, ctx.Err()
-		case ev, ok := <-proc.events:
-			if !ok {
-				return agent.Answer{}, a.exitError(proc)
-			}
-
-			if ev.SessionID != "" {
-				a.setSessionID(ev.SessionID)
-			}
-
-			switch ev.Type {
-			case "control_request":
-				go a.serveControl(ctx, proc, ev, h)
-
-				continue
-			case "control_cancel_request":
-				a.withdrawPrompt(ev.RequestID)
-
-				continue
-			}
-
-			if answer, done, err := handleEvent(ev, h.Progress); done {
-				a.chargeTurn(&answer)
-
-				return answer, err
-			}
-		}
-	}
-}
-
 // handleEvent reports progress for one stream event and returns done=true on the final result.
 func handleEvent(ev streamEvent, progress func(agent.Event)) (agent.Answer, bool, error) {
 	switch ev.Type {
-	case "assistant":
+	case typeAssistant:
 		for _, b := range parseBlocks(ev.Message) {
 			switch b.Type {
 			case "tool_use":
@@ -317,7 +346,7 @@ func handleEvent(ev streamEvent, progress func(agent.Event)) (agent.Answer, bool
 				}
 			}
 		}
-	case "result":
+	case typeResult:
 		if ev.IsError {
 			return agent.Answer{}, true, fmt.Errorf("claude code: %s", ev.Result)
 		}
@@ -332,12 +361,19 @@ func handleEvent(ev streamEvent, progress func(agent.Event)) (agent.Answer, bool
 	return agent.Answer{}, false, nil
 }
 
-// chargeTurn converts the cumulative cost reported by claude into this turn's share.
+// chargeTurn converts the cumulative cost reported by claude into this turn's
+// share. A turn that reports no total at all — a failed one — leaves the base
+// where it was, so what it did spend is charged to the turn after it rather
+// than to every turn that follows.
 func (a *Agent) chargeTurn(answer *agent.Answer) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
 	total := answer.CostUSD
+	if total <= 0 {
+		return
+	}
+
 	answer.CostUSD = max(total-a.costBase, 0)
 	a.costBase = total
 }

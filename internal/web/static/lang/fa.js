@@ -87,6 +87,7 @@ registerLanguage({
     threadDropNote: 'اینجا رو تموم کن و هیچی از اینجا به گفت‌وگوی بالا نره',
     threadBack: 'برگرد بالا',
     threadSummingUp: 'اینجا به چی رسیدیم؟',
+    backgroundDone: 'کاری که تو پس‌زمینه شروع کرده بود تموم شد',
     closeFailed: 'نشد این مکالمه رو تموم کنم: {error}',
     quoteClear: 'برش دار',
     summaryFailed: 'نشد خلاصه‌ش رو دربیارم: {error}',

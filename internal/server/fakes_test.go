@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"testing/fstest"
 
@@ -27,11 +28,33 @@ type fakeAgent struct {
 	prompt  agent.Prompt       // when set, Ask puts it to the user before answering
 	replies chan agent.Reply   // what the user replied
 	asked   chan agent.Request // the request the turn arrived with
+
+	mu      sync.Mutex
+	watcher agent.Unasked // where a turn taken without being asked is reported
 }
 
 func (f *fakeAgent) Name() string { return "fake" }
 func (f *fakeAgent) Cancel()      {}
 func (f *fakeAgent) Close() error { return nil }
+
+func (f *fakeAgent) Watch(u agent.Unasked) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	f.watcher = u
+}
+
+// speakUp is the agent taking a turn nobody asked for, the way Claude Code
+// does when a task it started in the background finishes.
+func (f *fakeAgent) speakUp(thread agent.Thread, answer agent.Answer, err error) {
+	f.mu.Lock()
+	watcher := f.watcher
+	f.mu.Unlock()
+
+	h, end := watcher.Begin(thread)
+	h.Progress(agent.Event{Kind: agent.KindTool, Tool: "Read", Detail: "the task output"})
+	end(answer, err)
+}
 
 func (f *fakeAgent) Ask(ctx context.Context, req agent.Request, h agent.Handler) (agent.Answer, error) {
 	if f.asked != nil {

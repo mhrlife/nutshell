@@ -239,7 +239,7 @@ func (s *Server) runTurn(ctx context.Context, turn int, req agent.Request) (agen
 	switch {
 	case errors.Is(err, agent.ErrCancelled), errors.Is(err, context.Canceled):
 		s.restoreNotes(req)
-		s.session.add(thread, turn, kindError, map[string]string{keyMessage: "cancelled", "code": "cancelled"})
+		s.session.add(thread, turn, kindError, cancelledEntry())
 	case err != nil:
 		logger.ErrorContext(ctx, "ask failed", "error", err)
 		s.restoreNotes(req)

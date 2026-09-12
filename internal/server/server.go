@@ -57,6 +57,9 @@ func New(ag agent.Agent, sp Speech, st Settings, static http.FileSystem, cfg Con
 		prompts: newPromptDesk(), session: newSession(logger), threads: newThreads(),
 	}
 
+	// From here on the agent can speak up on its own, not only when asked.
+	ag.Watch(unasked{srv: s})
+
 	mux := http.NewServeMux()
 	mux.Handle("GET /", http.FileServer(static))
 	mux.HandleFunc("GET /api/config", s.handleConfig)

@@ -96,16 +96,20 @@ function flash(message, isError) {
 
 // addTurn draws a question in the thread it was asked in. A turn belongs to
 // its thread for good: what is on screen is the thread being read, and every
-// other one is merely hidden.
+// other one is merely hidden. Two kinds of turn have no question of the
+// user's: the one that asks a side thread what it settled, and the one the
+// agent took on its own when background work of its own finished. Both get a
+// line nutshell wrote instead, which is why the wording is looked up here.
 function addTurn(id, thread, data) {
   const node = document.getElementById('turn-template').content.firstElementChild.cloneNode(true);
-  const question = data.closing ? t('threadSummingUp') : data.text;
-  const turn = { id, thread: thread || ROOT, question, closing: !!data.closing, node, answer: null, error: null, audio: null, loadingAudio: false, clips: [], cost: newCost() };
+  const turn = { id, thread: thread || ROOT, question: '', closing: !!data.closing, unasked: !!data.unasked, node, answer: null, error: null, audio: null, loadingAudio: false, clips: [], cost: newCost() };
+  turn.question = turnQuestion(turn, data.text);
   turn.cost.stt = pendingStt;
   pendingStt = null;
   node.dataset.thread = turn.thread;
   node.classList.toggle('closing', !!data.closing);
-  node.querySelector('.q').textContent = question;
+  node.classList.toggle('unasked', !!data.unasked);
+  node.querySelector('.q').textContent = turn.question;
   if (data.selection) {
     const about = node.querySelector('.q-quote');
     about.textContent = oneLine(data.selection);
@@ -159,9 +163,17 @@ function failTurn(turn, message) {
   scrollToEnd();
 }
 
+// turnQuestion is the line shown where the question goes: the user's own
+// words, or, for a turn they did not ask for, nutshell's own wording.
+function turnQuestion(turn, text) {
+  if (turn.closing) return t('threadSummingUp');
+  if (turn.unasked) return t('backgroundDone');
+  return text;
+}
+
 function renderMeta(turn) {
-  // nutshell wrote this question itself, so it follows the interface language
-  if (turn.closing) turn.node.querySelector('.q').textContent = t('threadSummingUp');
+  // nutshell wrote this line itself, so it follows the interface language
+  if (turn.closing || turn.unasked) turn.node.querySelector('.q').textContent = turnQuestion(turn, turn.question);
   if (!turn.answer) return;
   const speakBtn = turn.node.querySelector('.speak');
   const playing = player && player.turn === turn && !player.audio.paused;

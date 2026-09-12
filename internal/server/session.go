@@ -27,6 +27,16 @@ const (
 	kindThreadDone = "thread_done"
 )
 
+// cancelled is the code and the message of the error entry a turn nobody
+// waited out leaves behind. The browser knows the code and shows its own
+// wording for it.
+const cancelled = "cancelled"
+
+// cancelledEntry is that entry.
+func cancelledEntry() map[string]string {
+	return map[string]string{keyMessage: cancelled, "code": cancelled}
+}
+
 // logEntry is one thing that happened, numbered so a client can say where it
 // stopped reading. Thread is the conversation it happened in, so a browser
 // showing one thread can tell which entries are its own.
@@ -72,6 +82,10 @@ func (s *session) startTurn(q question) int {
 		entry["closing"] = true
 	}
 
+	if q.unasked {
+		entry["unasked"] = true
+	}
+
 	s.add(q.thread, turn, kindQuestion, entry)
 
 	return turn
@@ -85,6 +99,10 @@ type question struct {
 	// closing marks nutshell's own question rather than the user's: the one
 	// that asks a side thread what it settled before it is finished.
 	closing bool
+	// unasked marks a turn that began with no question at all, because the
+	// agent carried on by itself once work it had started in the background
+	// finished. The UI puts a line of its own where the question would be.
+	unasked bool
 }
 
 // mark records something that happened to a thread rather than inside a turn:

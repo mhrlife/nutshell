@@ -95,6 +95,9 @@ html[dir="rtl"] .empty p { font-family: var(--fa); font-style: normal; }
 
 .turn .q { font-style: italic; font-weight: 400; color: var(--muted); font-size: 15px; line-height: 1.4; white-space: pre-wrap; }
 
+/* the agent speaking up on its own: nutshell's line, not a question */
+.turn.unasked .q { font-style: normal; color: var(--muted-2); }
+
 /* the passage a question was about, quoted the way a chat app quotes a reply */
 .q-quote, .quote-text, .clip-quote { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; unicode-bidi: plaintext; text-align: start; }
 

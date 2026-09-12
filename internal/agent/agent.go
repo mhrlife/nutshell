@@ -67,6 +67,20 @@ type Request struct {
 	Notes []Note
 }
 
+// Unasked is told about the turns an agent takes on its own. An agent that
+// starts work in the background — Claude Code launches a task, answers
+// without waiting for it, and picks the conversation up again by itself once
+// it finishes — has something to say that belongs to no Ask call. nutshell
+// gives such a turn a turn of its own, so its answer is shown, logged and
+// read aloud like any other instead of being lost.
+type Unasked interface {
+	// Begin opens one such turn on thread. It returns the Handler the turn's
+	// progress and prompts go to, and the function that ends the turn with
+	// the answer it reached or the error that stopped it; an error means
+	// there is no answer.
+	Begin(thread Thread) (h Handler, end func(Answer, error))
+}
+
 // Agent is a conversational coding agent bound to one working directory.
 // Implementations keep conversation history between Ask calls, one history
 // per Request.Thread.
@@ -79,6 +93,10 @@ type Agent interface {
 	// before opens that thread as a copy of Request.Thread.Parent, so what
 	// was said on the parent is known and what follows never reaches it.
 	Ask(ctx context.Context, req Request, h Handler) (Answer, error)
+	// Watch says where the agent reports the turns it takes without being
+	// asked; see Unasked. It is called once, before the first Ask. An agent
+	// that never takes such a turn may ignore it.
+	Watch(Unasked)
 	// Cancel aborts the turn in progress, if any. The next Ask resumes the conversation.
 	Cancel()
 	// Close releases the agent's resources.

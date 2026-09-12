@@ -6,6 +6,17 @@ import (
 	"sync"
 )
 
+// The stream event types nutshell acts on. Everything else claude writes —
+// the user messages it echoes back, its rate-limit notices, the rest of the
+// system events — is read and passed over.
+const (
+	typeSystem        = "system"
+	typeAssistant     = "assistant"
+	typeResult        = "result"
+	typeControl       = "control_request"
+	typeControlCancel = "control_cancel_request"
+)
+
 // streamEvent is one line of `claude --output-format stream-json`.
 type streamEvent struct {
 	Type      string          `json:"type"`
