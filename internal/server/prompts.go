@@ -64,14 +64,15 @@ func (d *promptDesk) answer(id string, reply agent.Reply) bool {
 // turnHandler is the agent.Handler for one turn: it writes the agent's
 // progress and questions to the session log, which is what the browser reads.
 type turnHandler struct {
-	turn int
-	log  *session
-	desk *promptDesk
+	turn   int
+	thread string
+	log    *session
+	desk   *promptDesk
 }
 
 // Progress implements agent.Handler.
 func (h *turnHandler) Progress(ev agent.Event) {
-	h.log.add(h.turn, string(ev.Kind), ev)
+	h.log.add(h.thread, h.turn, string(ev.Kind), ev)
 }
 
 // Prompt implements agent.Handler: it puts the prompt on screen and blocks
@@ -81,15 +82,15 @@ func (h *turnHandler) Prompt(ctx context.Context, p agent.Prompt) (agent.Reply, 
 	replies := h.desk.wait(p.ID)
 	defer h.desk.forget(p.ID)
 
-	h.log.add(h.turn, kindPrompt, p)
+	h.log.add(h.thread, h.turn, kindPrompt, p)
 
 	select {
 	case reply := <-replies:
-		h.log.add(h.turn, kindPromptDone, map[string]string{"id": p.ID})
+		h.log.add(h.thread, h.turn, kindPromptDone, map[string]string{"id": p.ID})
 
 		return reply, nil
 	case <-ctx.Done():
-		h.log.add(h.turn, kindPromptDone, map[string]string{"id": p.ID})
+		h.log.add(h.thread, h.turn, kindPromptDone, map[string]string{"id": p.ID})
 
 		return agent.Reply{}, ctx.Err()
 	}

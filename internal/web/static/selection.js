@@ -37,10 +37,10 @@ function placeSelectionBar() {
 }
 
 function renderSelectionBar() {
-  const labels = { read: t('selRead'), summary: t('selSummary'), ask: t('selAsk') };
+  const labels = { read: t('selRead'), summary: t('selSummary'), ask: t('selAsk'), fork: t('selFork') };
   selBar.querySelectorAll('[data-act]').forEach((button) => {
     button.textContent = labels[button.dataset.act];
-    if (button.dataset.act !== 'ask') button.hidden = !cfg.voice;
+    if (button.dataset.act === 'read' || button.dataset.act === 'summary') button.hidden = !cfg.voice;
   });
 }
 
@@ -107,10 +107,12 @@ selBar.addEventListener('click', (e) => {
   const button = e.target.closest('[data-act]');
   const passage = selectedPassage();
   if (!button || !passage) return;
+  const act = button.dataset.act;
   const turn = selected;
   hideSelection();
-  if (button.dataset.act !== 'ask') { speakPassage(turn, passage, button.dataset.act === 'summary'); return; }
+  if (act === 'read' || act === 'summary') { speakPassage(turn, passage, act === 'summary'); return; }
   setQuote(passage);
+  setFork(act === 'fork'); // "ask about this" stays here; "ask separately" opens a side thread
   closeDoc(); // on a narrow screen the answer covers the input
 });
 

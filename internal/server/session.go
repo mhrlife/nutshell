@@ -23,15 +23,19 @@ const (
 	kindPromptDone = "prompt_done"
 	kindResult     = "result"
 	kindError      = "error"
+	kindThread     = "thread"
+	kindThreadDone = "thread_done"
 )
 
 // logEntry is one thing that happened, numbered so a client can say where it
-// stopped reading.
+// stopped reading. Thread is the conversation it happened in, so a browser
+// showing one thread can tell which entries are its own.
 type logEntry struct {
-	Seq  int             `json:"seq"`
-	Turn int             `json:"turn"`
-	Kind string          `json:"kind"`
-	Data json.RawMessage `json:"data"`
+	Seq    int             `json:"seq"`
+	Turn   int             `json:"turn"`
+	Thread string          `json:"thread"`
+	Kind   string          `json:"kind"`
+	Data   json.RawMessage `json:"data"`
 }
 
 // session is the append-only record of the conversation.
@@ -49,27 +53,49 @@ func newSession(logger *slog.Logger) *session {
 	return &session{logger: logger, changed: make(chan struct{})}
 }
 
-// startTurn records a question, with the excerpt of the passage it is about
-// when there is one, and returns the turn number the rest of that turn's
-// entries carry.
-func (s *session) startTurn(question, selection string) int {
+// startTurn records a question asked on one thread, with the excerpt of the
+// passage it is about when there is one, and returns the turn number the rest
+// of that turn's entries carry. Turns are numbered across all threads at
+// once, so a number names one turn and nothing else.
+func (s *session) startTurn(q question) int {
 	s.mu.Lock()
 	s.turns++
 	turn := s.turns
 	s.mu.Unlock()
 
-	entry := map[string]any{"text": question, "started": time.Now().UnixMilli()}
-	if selection != "" {
-		entry["selection"] = selection
+	entry := map[string]any{"text": q.text, "started": time.Now().UnixMilli()}
+	if q.selection != "" {
+		entry["selection"] = q.selection
 	}
 
-	s.add(turn, kindQuestion, entry)
+	if q.closing {
+		entry["closing"] = true
+	}
+
+	s.add(q.thread, turn, kindQuestion, entry)
 
 	return turn
 }
 
+// question is what starts a turn.
+type question struct {
+	thread    string
+	text      string
+	selection string // the passage the question is about, already shortened
+	// closing marks nutshell's own question rather than the user's: the one
+	// that asks a side thread what it settled before it is finished.
+	closing bool
+}
+
+// mark records something that happened to a thread rather than inside a turn:
+// a side thread opened, or finished. Both are written to the log of the
+// thread above, which is where the user is when they happen.
+func (s *session) mark(thread, kind string, data any) {
+	s.add(thread, 0, kind, data)
+}
+
 // add appends one entry and wakes every reader waiting for it.
-func (s *session) add(turn int, kind string, data any) {
+func (s *session) add(thread string, turn int, kind string, data any) {
 	raw, err := json.Marshal(data)
 	if err != nil {
 		s.logger.Error("recording a session entry", "turn", turn, "kind", kind, "error", err)
@@ -81,7 +107,7 @@ func (s *session) add(turn int, kind string, data any) {
 	defer s.mu.Unlock()
 
 	s.seq++
-	entry := logEntry{Seq: s.seq, Turn: turn, Kind: kind, Data: raw}
+	entry := logEntry{Seq: s.seq, Turn: turn, Thread: thread, Kind: kind, Data: raw}
 
 	// Tool and text entries are the turn's live activity line, of which only
 	// the newest is ever on screen: replacing the previous one keeps a long

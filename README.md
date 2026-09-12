@@ -12,8 +12,9 @@ task, a piece of research — and the reply comes back *in a nutshell*: two or
 three spoken sentences, while the agent does the work in your project. The
 full write-up is not read at you; it waits on screen. Open it, and you can
 hand any part of it back: select a passage to hear it read, to hear it
-summarized, or to ask about it — and the whole thing has a player, so you
-can listen to all of it while you do something else.
+summarized, to ask about it, or to ask about it somewhere else entirely (see
+[side threads](#side-threads)) — and the whole thing has a player, so you can
+listen to all of it while you do something else.
 
 nutshell starts a coding agent (Claude Code today) in the current directory,
 opens a small web UI on a random local port, and wires it to speech-to-text
@@ -114,3 +115,29 @@ nutshell's own flags:
 | `--tts-speed` | `1.2` | How fast the voice talks; `1` is the model's own pace (Grok accepts `0.7`–`1.5`) |
 | `--tts-prompt` | `none` | Delivery instructions placed before the spoken text, for voices that follow them (Gemini TTS does; Grok reads them aloud): `none`, the built-in calm `lecture` style, or literal text |
 | `--debug` | | Log every API call, turn and OpenRouter request (`--verbose` stays the agent's own flag) |
+
+## Side threads
+
+One answer often raises three questions of its own. Asking them where you are
+buries the thread you were following, so nutshell lets a question go off on
+its own: select the term you are wondering about and pick **ask in a new
+conversation**, or arm the branch button next to the input (`b`) and ask.
+
+That opens a side thread. It starts out knowing everything said so far — it
+forks the agent's session, rather than starting from nothing — but nothing
+asked in it ever reaches the conversation it came from. Side threads can be
+opened from side threads, as deep as you like; the trail at the top says where
+you are, and a line in the thread above marks where each one was opened.
+
+When you are done, **got what I needed** asks the side thread to sum up what
+it settled and takes that one paragraph back with it, where it rides along
+with your next question as something the agent already knows. **Just leave
+it** closes the thread and carries nothing.
+
+```mermaid
+flowchart TD
+    Main[Main thread] -->|ask in a new conversation| Side[Side thread<br/>forked, knows everything so far]
+    Side -->|deeper still| Deeper[Another side thread]
+    Deeper -->|conclusion| Side
+    Side -->|conclusion, if you want it| Main
+```

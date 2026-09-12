@@ -9,6 +9,8 @@ the same interface). Go, standard library only; the browser UI is embedded.
   start the server.
 - `internal/agent` – the `Agent` interface plus the shared answer format
   (`Instructions`, `ParseAnswer`). New agents go in `internal/agent/<name>`.
+  A question carries the `Thread` it belongs to: agents keep one conversation
+  per thread, and start a thread it has not seen as a copy of its parent.
 - `internal/agent/claudecode` – Claude Code implementation. `Launch` picks how
   the CLI is reached: `DirectLaunch` runs it, `WrapperLaunch` runs a host CLI
   that starts it for us. `launch.go` owns the argv for both.
@@ -17,7 +19,9 @@ the same interface). Go, standard library only; the browser UI is embedded.
   are built from the entry for that code, never from all of them at once.
 - `internal/speech` – OpenRouter speech-to-text and text-to-speech.
 - `internal/server` – HTTP + server-sent-events API used by the UI. Every
-  request passes `guard`: loopback Host only, no cross-origin writes.
+  request passes `guard`: loopback Host only, no cross-origin writes. The tree
+  of side threads lives in `threads.go`; every log entry names the thread it
+  happened in, and the browser shows one thread at a time.
 - `internal/web/static` – the UI (plain HTML/CSS/JS, no build step).
 
 ## Rules

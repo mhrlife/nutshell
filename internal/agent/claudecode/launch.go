@@ -17,6 +17,7 @@ const separator = "--"
 const (
 	flagInputFormat    = "--input-format"
 	flagPermissionMode = "--permission-mode"
+	flagResume         = "--resume"
 )
 
 // Launch is how the Claude Code CLI is reached.
@@ -70,18 +71,40 @@ func (a *Agent) command() []string {
 	return append(argv, a.engineArgs()...)
 }
 
-// hostArgs are read by a wrapper host rather than by Claude Code.
+// hostArgs are read by a wrapper host rather than by Claude Code. The host
+// resolves the working directory from --resume, so it is given the session
+// being resumed even when that session belongs to another thread and this one
+// is about to fork it: the fork flag alone is Claude Code's business.
 func (a *Agent) hostArgs() []string {
 	if a.launch != WrapperLaunch {
 		return nil
 	}
 
 	args := []string{flagInputFormat, streamJSON}
-	if a.sessionID != "" {
-		args = append(args, "--resume", a.sessionID)
+	if id, _ := a.history(); id != "" {
+		args = append(args, flagResume, id)
 	}
 
 	return append(args, separator)
+}
+
+// history says which conversation the next process is to carry on:
+//
+//   - a thread that has been asked something before resumes its own session;
+//   - a side thread asked its first question resumes the session of the
+//     thread it came from, and forks it, so it starts out knowing everything
+//     that thread knows and nothing it says afterwards reaches it;
+//   - anything else starts a conversation from nothing.
+func (a *Agent) history() (id string, fork bool) {
+	if own := a.sessions[a.thread.Name()]; own != "" {
+		return own, false
+	}
+
+	if parent := a.sessions[a.thread.Parent]; a.thread.Parent != "" && parent != "" {
+		return parent, true
+	}
+
+	return "", false
 }
 
 // engineArgs are the flags Claude Code itself reads.
@@ -98,8 +121,16 @@ func (a *Agent) engineArgs() []string {
 		args = append(args, flagPermissionMode, defaultPermissionMode)
 	}
 
-	if a.launch == DirectLaunch && a.sessionID != "" {
-		args = append(args, "--resume", a.sessionID)
+	id, fork := a.history()
+
+	if a.launch == DirectLaunch && id != "" {
+		args = append(args, flagResume, id)
+	}
+
+	// The wrapper host was handed the session to resume; this says what to do
+	// with it, and is read by Claude Code in either launch.
+	if fork {
+		args = append(args, "--fork-session")
 	}
 
 	return append(args, a.extraArgs...)

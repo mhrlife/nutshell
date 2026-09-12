@@ -3,6 +3,11 @@
 // One `claude -p --input-format stream-json` process is kept alive across
 // turns so the conversation keeps its history. If the process dies or is
 // cancelled, the next turn starts a new one with --resume.
+//
+// Threads are sessions: one per thread, remembered here by thread name. Only
+// one process runs at a time, so a question asked on another thread replaces
+// it with one resuming that thread's session — and a side thread's first
+// question forks the session of the thread it came from.
 package claudecode
 
 import (
@@ -38,8 +43,9 @@ type Agent struct {
 
 	mu        sync.Mutex // guards the fields below
 	proc      *process
-	language  lang.Language // the language proc's system prompt was built for
-	sessionID string
+	language  lang.Language     // the language proc's system prompt was built for
+	thread    agent.Thread      // the thread proc is carrying on
+	sessions  map[string]string // session id of every thread asked something so far
 	cancelled bool
 	costBase  float64                       // cumulative cost already attributed to earlier turns of this process
 	prompts   map[string]context.CancelFunc // pending questions, by control request id
@@ -78,7 +84,10 @@ func (p *process) send(v any) error {
 // unchanged, so callers can forward flags such as --model or --mcp-config.
 // logger receives what the agent logs.
 func New(argv []string, launch Launch, extraArgs []string, logger *slog.Logger) *Agent {
-	return &Agent{argv: argv, launch: launch, extraArgs: extraArgs, logger: logger}
+	return &Agent{
+		argv: argv, launch: launch, extraArgs: extraArgs, logger: logger,
+		sessions: map[string]string{},
+	}
 }
 
 // Name implements agent.Agent.
@@ -90,12 +99,13 @@ func (a *Agent) Name() string {
 	return "claude code"
 }
 
-// SessionID returns the Claude Code session id once one is known.
-func (a *Agent) SessionID() string {
+// SessionID returns the Claude Code session id of one thread, once that
+// thread has been asked something.
+func (a *Agent) SessionID(thread agent.Thread) string {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
-	return a.sessionID
+	return a.sessions[thread.Name()]
 }
 
 // Cancel implements agent.Agent.
@@ -130,7 +140,7 @@ func (a *Agent) Ask(ctx context.Context, req agent.Request, h agent.Handler) (ag
 	defer a.turn.Unlock()
 	defer a.withdrawAllPrompts()
 
-	proc, err := a.ensureProcess(ctx, req.Language)
+	proc, err := a.ensureProcess(ctx, req.Language, req.Thread)
 	if err != nil {
 		return agent.Answer{}, err
 	}
@@ -147,20 +157,27 @@ func (a *Agent) Ask(ctx context.Context, req agent.Request, h agent.Handler) (ag
 }
 
 // ensureProcess returns the running process, starting one when there is none
-// and replacing one started for another language. The language rules reach
-// claude through --append-system-prompt, which is only read at startup, so
-// switching language means a new process; the conversation survives it
-// because the new one resumes the same session.
-func (a *Agent) ensureProcess(ctx context.Context, l lang.Language) (*process, error) {
+// and replacing one started for another language or another thread. Neither
+// the language rules, which reach claude through --append-system-prompt, nor
+// the conversation to carry on, which reaches it through --resume, can be
+// changed once the process is up; both survive the restart, because the new
+// process resumes where the old one left off.
+func (a *Agent) ensureProcess(ctx context.Context, l lang.Language, t agent.Thread) (*process, error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
-	if a.proc != nil && a.language.Code != l.Code {
+	switch {
+	case a.proc == nil:
+	case a.language.Code != l.Code:
 		a.logger.DebugContext(ctx, "language changed, restarting claude", "from", a.language.Code, "to", l.Code)
+		a.stopLocked()
+	case a.thread.Name() != t.Name():
+		a.logger.DebugContext(ctx, "thread changed, restarting claude", "from", a.thread.Name(), "to", t.Name())
 		a.stopLocked()
 	}
 
 	a.language = l
+	a.thread = t
 
 	if a.proc == nil {
 		proc, err := a.startLocked()
@@ -346,9 +363,12 @@ func (a *Agent) exitError(proc *process) error {
 	return errors.New("claude code exited: " + tail)
 }
 
+// setSessionID records the session the running process turned out to be.
+// It belongs to the thread that process was started for: a forked session is
+// a new one, and writing it anywhere else would lose the thread it came from.
 func (a *Agent) setSessionID(id string) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
-	a.sessionID = id
+	a.sessions[a.thread.Name()] = id
 }

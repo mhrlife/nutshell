@@ -12,6 +12,7 @@
 <link rel="stylesheet" href="style.css">
 <link rel="stylesheet" href="narrator.css">
 <link rel="stylesheet" href="transcribe.css">
+<link rel="stylesheet" href="threads.css">
 </head>
 <body>
 <aside class="rail">
@@ -22,6 +23,8 @@
       <div class="status"><span id="status"></span><span id="session-cost" class="cost" hidden></span></div>
     </div>
   </header>
+
+  <nav id="trail" class="trail" hidden></nav>
 
   <div id="transcript" class="transcript">
     <div id="empty" class="empty"><p id="empty-hint"></p></div>
@@ -35,6 +38,11 @@
         <button class="unsent-discard" type="button"></button>
       </div>
     </div>
+    <div id="thread-bar" class="thread-bar" hidden>
+      <span class="thread-note"></span>
+      <button class="thread-done" type="button"></button>
+      <button class="thread-drop" type="button"></button>
+    </div>
     <div id="quote" class="quote" hidden>
       <span class="quote-text"></span>
       <button class="quote-clear icon-btn" type="button"></button>
@@ -42,6 +50,7 @@
     <div class="foot-row">
       <button id="talk" class="mic" type="button"></button>
       <textarea id="input" rows="1" spellcheck="false"></textarea>
+      <button id="fork" class="icon-btn" type="button"></button>
       <button id="settings-btn" class="icon-btn" type="button"></button>
       <div class="thinking" aria-hidden="true"><i></i><i></i><i></i></div>
     </div>
@@ -88,6 +97,7 @@
   <button type="button" data-act="read"></button>
   <button type="button" data-act="summary"></button>
   <button type="button" data-act="ask"></button>
+  <button type="button" data-act="fork"></button>
 </div>
 
 <div id="settings" class="sheet" hidden></div>
@@ -106,6 +116,16 @@
     </div>
     <div class="clips" hidden></div>
     <div class="error" dir="auto" hidden></div>
+  </article>
+</template>
+
+<template id="thread-template">
+  <article class="side">
+    <div class="side-head">
+      <span class="side-label"></span>
+      <span class="side-title" dir="auto"></span>
+    </div>
+    <div class="side-note" dir="auto" hidden></div>
   </article>
 </template>
 
@@ -130,6 +150,7 @@
 <script src="audio.js"></script>
 <script src="cost.js"></script>
 <script src="session.js"></script>
+<script src="threads.js"></script>
 <script src="selection.js"></script>
 <script src="clips.js"></script>
 <script src="speakable.js"></script>

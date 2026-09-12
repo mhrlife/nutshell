@@ -64,17 +64,17 @@ func TestCommandResumePlacement(t *testing.T) {
 	t.Parallel()
 
 	direct := New([]string{claudeBin}, DirectLaunch, nil, slog.Default())
-	direct.sessionID = "sess-1"
+	direct.sessions[agent.RootThread] = "sess-1"
 
 	wrapped := New([]string{"divar-copilot", "agent"}, WrapperLaunch, nil, slog.Default())
-	wrapped.sessionID = "sess-1"
+	wrapped.sessions[agent.RootThread] = "sess-1"
 
-	if got := direct.command(); indexOf(got, "--resume") < indexOf(got, "--append-system-prompt") {
+	if got := direct.command(); indexOf(got, flagResume) < indexOf(got, "--append-system-prompt") {
 		t.Errorf("direct launch put --resume before the Claude Code flags: %v", got)
 	}
 
 	got := wrapped.command()
-	if r, sep := indexOf(got, "--resume"), indexOf(got, "--"); r < 0 || sep < 0 || r > sep {
+	if r, sep := indexOf(got, flagResume), indexOf(got, separator); r < 0 || sep < 0 || r > sep {
 		t.Errorf("wrapper launch must put --resume before the separator: %v", got)
 	}
 

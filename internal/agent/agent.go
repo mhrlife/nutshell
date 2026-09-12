@@ -59,16 +59,25 @@ type Request struct {
 	// language nutshell has no rules for arrives as lang.Lookup returns it,
 	// and agents fall back to language-agnostic instructions.
 	Language lang.Language
+	// Thread is the conversation this question belongs to. The zero value is
+	// the one nutshell starts in.
+	Thread Thread
+	// Notes are the conclusions of side threads the user finished since the
+	// last question on this thread. Agents send Message, which carries them.
+	Notes []Note
 }
 
 // Agent is a conversational coding agent bound to one working directory.
-// Implementations keep conversation history between Ask calls.
+// Implementations keep conversation history between Ask calls, one history
+// per Request.Thread.
 type Agent interface {
 	// Name is a short human-readable label shown in the UI, e.g. "claude code".
 	Name() string
 	// Ask sends one user message and blocks until the final answer arrives.
 	// h receives progress events and any prompt the agent needs answered
-	// before it can carry on.
+	// before it can carry on. A question for a thread the agent has not seen
+	// before opens that thread as a copy of Request.Thread.Parent, so what
+	// was said on the parent is known and what follows never reaches it.
 	Ask(ctx context.Context, req Request, h Handler) (Answer, error)
 	// Cancel aborts the turn in progress, if any. The next Ask resumes the conversation.
 	Cancel()
