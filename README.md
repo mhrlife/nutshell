@@ -2,19 +2,34 @@
 
 # nutshell
 
-Talk to a coding agent instead of typing at it — a question, a task, a piece
-of research — and get the reply *in a nutshell*: a few spoken sentences, with
-the full write-up one click away.
+Ask a coding agent something and it hands you a wall of text. You read it,
+you type again, you read again. Every tool we have talks to us in one
+channel — text, text and more text — so the whole conversation stays on the
+keyboard, even the half of it that could have been a sentence said out loud.
+
+nutshell puts a voice in front of one. Say what you need — a question, a
+task, a piece of research — and the reply comes back *in a nutshell*: two or
+three spoken sentences, while the agent does the work in your project. The
+full write-up is not read at you; it waits on screen. Open it, and you can
+hand any part of it back: select a passage to hear it read, to hear it
+summarized, or to ask about it — and the whole thing has a player, so you
+can listen to all of it while you do something else.
 
 nutshell starts a coding agent (Claude Code today) in the current directory,
 opens a small web UI on a random local port, and wires it to speech-to-text
 and text-to-speech through OpenRouter.
 
 ```mermaid
-flowchart LR
-    You([🗣️ You speak]) --> Agent[Coding agent]
-    Agent --> Short[🔊 Short answer<br/>spoken back to you]
-    Agent --> Full[📄 Full write-up<br/>one click away]
+flowchart TD
+    Speak([🗣️ You speak]) --> Agent[Coding agent<br/>working in your project]
+    Agent --> Short[🔊 Short answer spoken back to you]
+    Short --> Full[📄 Full write-up waiting on screen]
+    Full --> Play[▶️ Listen to all of it]
+    Full --> Sel{{Select any passage}}
+    Sel --> Read[🔊 Hear it read]
+    Sel --> Sum[📝 Hear it summarized]
+    Sel --> Ask[🗣️ Ask about it]
+    Ask --> Agent
 ```
 
 ## Install
