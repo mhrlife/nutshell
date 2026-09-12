@@ -163,21 +163,59 @@ func openBrowser(ctx context.Context, logger *slog.Logger, url string) {
 	logger.InfoContext(ctx, "opening browser", "url", url)
 }
 
+// The --agent values nutshell understands.
+const (
+	agentClaude        = "claude"
+	agentClaudeWrapper = "claude-wrapper"
+)
+
+// defaultClaudeBin is the Claude Code CLI's own name on PATH.
+const defaultClaudeBin = "claude"
+
 // newAgent picks the agent implementation named by the flags.
 func newAgent(opts cli.Options, logger *slog.Logger) (agent.Agent, error) {
-	switch opts.Agent {
-	case "claude":
-		bin := opts.AgentBin
-		if bin == "" {
-			bin = "claude"
-		}
-
-		if _, err := exec.LookPath(bin); err != nil {
-			return nil, fmt.Errorf("agent executable: %w", err)
-		}
-
-		return claudecode.New(bin, opts.AgentArgs, logger), nil
-	default:
-		return nil, fmt.Errorf("unknown agent %q (supported: claude)", opts.Agent)
+	launch, err := launchFor(opts.Agent)
+	if err != nil {
+		return nil, err
 	}
+
+	argv := agentCommand(opts.AgentBin, launch)
+	if len(argv) == 0 {
+		return nil, fmt.Errorf(
+			"--agent %s needs --agent-bin naming the host command, for example "+
+				`--agent-bin "divar-copilot agent"`, opts.Agent)
+	}
+
+	if _, err := exec.LookPath(argv[0]); err != nil {
+		return nil, fmt.Errorf("agent executable: %w", err)
+	}
+
+	return claudecode.New(argv, launch, opts.AgentArgs, logger), nil
+}
+
+func launchFor(name string) (claudecode.Launch, error) {
+	switch name {
+	case agentClaude:
+		return claudecode.DirectLaunch, nil
+	case agentClaudeWrapper:
+		return claudecode.WrapperLaunch, nil
+	default:
+		return 0, fmt.Errorf("unknown agent %q (supported: %s, %s)",
+			name, agentClaude, agentClaudeWrapper)
+	}
+}
+
+// agentCommand turns --agent-bin into the argv that starts the agent. A wrapper
+// host is named together with its subcommand, so its value is split on spaces;
+// a direct launch keeps the value whole, because it is one executable path.
+func agentCommand(bin string, launch claudecode.Launch) []string {
+	if launch == claudecode.WrapperLaunch {
+		return strings.Fields(bin)
+	}
+
+	if bin == "" {
+		return []string{defaultClaudeBin}
+	}
+
+	return []string{bin}
 }

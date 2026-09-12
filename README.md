@@ -2,19 +2,35 @@
 
 # nutshell
 
-Talk to a coding agent instead of typing at it — a question, a task, a piece
-of research — and get the reply *in a nutshell*: a few spoken sentences, with
-the full write-up one click away.
+Ask a coding agent something and it hands you a wall of text. You read it,
+you type again, you read again. Every tool we have talks to us in one
+channel — text, text and more text — so the whole conversation stays on the
+keyboard, even the half of it that could have been a sentence said out loud.
+
+nutshell puts a voice in front of one. Say what you need — a question, a
+task, a piece of research — and the reply comes back *in a nutshell*: two or
+three spoken sentences, while the agent does the work in your project. The
+full write-up is not read at you; it waits on screen. Open it, and you can
+hand any part of it back: select a passage to hear it read, to hear it
+summarized, to ask about it, or to ask about it somewhere else entirely (see
+[side threads](#side-threads)) — and the whole thing has a player, so you can
+listen to all of it while you do something else.
 
 nutshell starts a coding agent (Claude Code today) in the current directory,
 opens a small web UI on a random local port, and wires it to speech-to-text
 and text-to-speech through OpenRouter.
 
 ```mermaid
-flowchart LR
-    You([🗣️ You speak]) --> Agent[Coding agent]
-    Agent --> Short[🔊 Short answer<br/>spoken back to you]
-    Agent --> Full[📄 Full write-up<br/>one click away]
+flowchart TD
+    Speak([🗣️ You speak]) --> Agent[Coding agent<br/>working in your project]
+    Agent --> Short[🔊 Short answer spoken back to you]
+    Short --> Full[📄 Full write-up waiting on screen]
+    Full --> Play[▶️ Listen to all of it]
+    Full --> Sel{{Select any passage}}
+    Sel --> Read[🔊 Hear it read]
+    Sel --> Sum[📝 Hear it summarized]
+    Sel --> Ask[🗣️ Ask about it]
+    Ask --> Agent
 ```
 
 ## Install
@@ -46,6 +62,26 @@ Two more things before the first run:
 
    Without it the UI still works with typed messages; voice is switched off.
 
+## Behind a wrapper CLI
+
+Not everyone starts `claude` directly. A team may have a host CLI that
+configures a Claude Code session first — a system prompt, an MCP set, a
+sandbox — and starts the CLI itself. `--agent claude-wrapper` drives Claude
+Code through such a host:
+
+```sh
+nutshell --agent claude-wrapper --agent-bin "divar-copilot agent"
+```
+
+What a host has to do for this to work:
+
+- render `-p`, `--input-format stream-json`, `--output-format stream-json` and
+  `--verbose` itself, so nutshell does not pass them a second time;
+- accept `--resume <id>` among its own flags, ahead of a `--` separator: the
+  host is what resolves the session's working directory from that id;
+- forward everything after `--` to Claude Code unchanged, so nutshell can still
+  pass `--append-system-prompt`, `--permission-prompt-tool` and your own flags.
+
 ## Run
 
 ```sh
@@ -69,8 +105,8 @@ nutshell's own flags:
 | `--port` | `0` (random) | Port for the web UI |
 | `--no-open` | | Don't open the browser |
 | `--lang` | `en` | Default UI language (`en` or `fa`) |
-| `--agent` | `claude` | Which agent to drive |
-| `--agent-bin` | | Path to the agent executable |
+| `--agent` | `claude` | Which agent to drive: `claude`, or `claude-wrapper` for a host CLI that starts Claude Code for us |
+| `--agent-bin` | | Path to the agent executable; for `claude-wrapper`, the host command and its subcommand |
 | `--openrouter-key` | `$OPENROUTER_API_KEY` | OpenRouter API key |
 | `--stt-model` | `google/gemini-3.8-flash` | Speech-to-text model (a chat model with audio input) |
 | `--summary-model` | `google/gemini-3.8-flash` | Summarizes a selected passage before it is read aloud |
@@ -84,8 +120,8 @@ nutshell's own flags:
 
 One answer often raises three questions of its own. Asking them where you are
 buries the thread you were following, so nutshell lets a question go off on
-its own: select the term you are wondering about and pick **ask separately**,
-or arm the branch button next to the input (`b`) and ask.
+its own: select the term you are wondering about and pick **ask in a new
+conversation**, or arm the branch button next to the input (`b`) and ask.
 
 That opens a side thread. It starts out knowing everything said so far — it
 forks the agent's session, rather than starting from nothing — but nothing
@@ -100,7 +136,7 @@ it** closes the thread and carries nothing.
 
 ```mermaid
 flowchart TD
-    Main[Main thread] -->|ask separately| Side[Side thread<br/>forked, knows everything so far]
+    Main[Main thread] -->|ask in a new conversation| Side[Side thread<br/>forked, knows everything so far]
     Side -->|deeper still| Deeper[Another side thread]
     Deeper -->|conclusion| Side
     Side -->|conclusion, if you want it| Main

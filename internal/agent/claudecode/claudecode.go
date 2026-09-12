@@ -4,17 +4,21 @@
 // turns so the conversation keeps its history. If the process dies or is
 // cancelled, the next turn starts a new one with --resume.
 //
-// Threads are claude sessions: one per thread, remembered here by thread
-// name. Only one process runs at a time, so a question asked on another
-// thread replaces it with one resuming that thread's session — and a side
-// thread's first question forks the session of the thread it came from.
+// Threads are sessions: one per thread, remembered here by thread name. Only
+// one process runs at a time, so a question asked on another thread replaces
+// it with one resuming that thread's session — and a side thread's first
+// question forks the session of the thread it came from.
 package claudecode
 
 import (
+	"bufio"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
+	"os/exec"
 	"strings"
 	"sync"
 
@@ -30,7 +34,8 @@ const (
 
 // Agent drives one Claude Code process.
 type Agent struct {
-	bin       string
+	argv      []string
+	launch    Launch
 	extraArgs []string
 	logger    *slog.Logger
 
@@ -39,8 +44,8 @@ type Agent struct {
 	mu        sync.Mutex // guards the fields below
 	proc      *process
 	language  lang.Language     // the language proc's system prompt was built for
-	thread    string            // the thread proc is carrying on
-	sessions  map[string]string // claude session id of every thread asked something so far
+	thread    agent.Thread      // the thread proc is carrying on
+	sessions  map[string]string // session id of every thread asked something so far
 	cancelled bool
 	costBase  float64                       // cumulative cost already attributed to earlier turns of this process
 	prompts   map[string]context.CancelFunc // pending questions, by control request id
@@ -48,16 +53,51 @@ type Agent struct {
 
 var _ agent.Agent = (*Agent)(nil)
 
-// New returns an agent that runs bin (normally "claude") in the current
-// directory. extraArgs are appended to the command line unchanged, so callers
-// can forward flags such as --model or --mcp-config. logger receives what the
-// agent logs.
-func New(bin string, extraArgs []string, logger *slog.Logger) *Agent {
-	return &Agent{bin: bin, extraArgs: extraArgs, logger: logger, sessions: map[string]string{}}
+// process is one running claude executable.
+type process struct {
+	cmd     *exec.Cmd
+	stdin   io.WriteCloser
+	stdinMu sync.Mutex // answers to control requests are written from many goroutines
+	events  <-chan streamEvent
+	stderr  *tailBuffer
+	stop    context.CancelFunc
+}
+
+// send writes one newline-terminated JSON message to the process.
+func (p *process) send(v any) error {
+	line, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	p.stdinMu.Lock()
+	defer p.stdinMu.Unlock()
+
+	_, err = p.stdin.Write(append(line, '\n'))
+
+	return err
+}
+
+// New returns an agent that runs argv (normally ["claude"]) in the current
+// directory. launch says whether argv is the Claude Code CLI itself or a host
+// CLI that starts it. extraArgs are appended to the Claude Code flags
+// unchanged, so callers can forward flags such as --model or --mcp-config.
+// logger receives what the agent logs.
+func New(argv []string, launch Launch, extraArgs []string, logger *slog.Logger) *Agent {
+	return &Agent{
+		argv: argv, launch: launch, extraArgs: extraArgs, logger: logger,
+		sessions: map[string]string{},
+	}
 }
 
 // Name implements agent.Agent.
-func (a *Agent) Name() string { return "claude code" }
+func (a *Agent) Name() string {
+	if a.launch == WrapperLaunch {
+		return "claude code via " + a.argv[0]
+	}
+
+	return "claude code"
+}
 
 // SessionID returns the Claude Code session id of one thread, once that
 // thread has been asked something.
@@ -131,16 +171,16 @@ func (a *Agent) ensureProcess(ctx context.Context, l lang.Language, t agent.Thre
 	case a.language.Code != l.Code:
 		a.logger.DebugContext(ctx, "language changed, restarting claude", "from", a.language.Code, "to", l.Code)
 		a.stopLocked()
-	case a.thread != t.Name():
-		a.logger.DebugContext(ctx, "thread changed, restarting claude", "from", a.thread, "to", t.Name())
+	case a.thread.Name() != t.Name():
+		a.logger.DebugContext(ctx, "thread changed, restarting claude", "from", a.thread.Name(), "to", t.Name())
 		a.stopLocked()
 	}
 
 	a.language = l
-	a.thread = t.Name()
+	a.thread = t
 
 	if a.proc == nil {
-		proc, err := a.startLocked(l, t)
+		proc, err := a.startLocked()
 		if err != nil {
 			return nil, err
 		}
@@ -151,6 +191,80 @@ func (a *Agent) ensureProcess(ctx context.Context, l lang.Language, t agent.Thre
 	}
 
 	return a.proc, nil
+}
+
+func (a *Agent) startLocked() (*process, error) {
+	argv := a.command()
+
+	ctx, stop := context.WithCancel(context.Background())
+	cmd := exec.CommandContext(ctx, argv[0], argv[1:]...) //nolint:gosec // running the user's own agent with the flags they passed
+
+	stdin, err := cmd.StdinPipe()
+	if err != nil {
+		stop()
+
+		return nil, fmt.Errorf("claude stdin: %w", err)
+	}
+
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		stop()
+
+		return nil, fmt.Errorf("claude stdout: %w", err)
+	}
+
+	stderr := &tailBuffer{max: stderrTail}
+	cmd.Stderr = stderr
+
+	if err := cmd.Start(); err != nil {
+		stop()
+
+		return nil, fmt.Errorf("starting claude: %w", err)
+	}
+
+	events := make(chan streamEvent, eventChanSize)
+
+	go readEvents(cmd, stdout, events)
+
+	proc := &process{cmd: cmd, stdin: stdin, events: events, stderr: stderr, stop: stop}
+	// Announce ourselves as the host that answers control requests. Claude
+	// Code carries on without this, so a failure here is not fatal.
+	_ = proc.send(map[string]any{
+		"type":       "control_request",
+		"request_id": "nutshell-initialize",
+		"request":    map[string]any{"subtype": "initialize"},
+	})
+
+	return proc, nil
+}
+
+// readEvents decodes stdout line by line until the process exits, then closes events.
+func readEvents(cmd *exec.Cmd, stdout io.Reader, events chan<- streamEvent) {
+	defer close(events)
+
+	sc := bufio.NewScanner(stdout)
+	sc.Buffer(make([]byte, 1<<20), maxLineBytes)
+
+	for sc.Scan() {
+		var ev streamEvent
+		if err := json.Unmarshal(sc.Bytes(), &ev); err != nil {
+			continue // claude occasionally prints non-JSON diagnostics
+		}
+
+		events <- ev
+	}
+
+	_ = cmd.Wait()
+}
+
+func userMessage(text string) map[string]any {
+	return map[string]any{
+		"type": "user",
+		"message": map[string]any{
+			"role":    "user",
+			"content": []map[string]string{{"type": "text", "text": text}},
+		},
+	}
 }
 
 func (a *Agent) awaitResult(ctx context.Context, proc *process, h agent.Handler) (agent.Answer, error) {
@@ -256,9 +370,5 @@ func (a *Agent) setSessionID(id string) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
-	if a.thread == "" {
-		a.thread = agent.RootThread
-	}
-
-	a.sessions[a.thread] = id
+	a.sessions[a.thread.Name()] = id
 }
