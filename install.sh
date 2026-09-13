@@ -289,7 +289,7 @@ if ! command -v claude >/dev/null 2>&1; then
 fi
 
 if [ -z "${OPENROUTER_API_KEY:-}" ]; then
-	info "  Set a key for voice:     ${BOLD}export OPENROUTER_API_KEY=sk-or-...${NC}"
+	info "  Set a key for voice:     ${BOLD}\"api_key\"${NC} in the file ${BOLD}nutshell config path${NC} prints, or ${BOLD}export OPENROUTER_API_KEY=sk-or-...${NC}"
 	info "  ${DIM}Without it nutshell still works with typed questions.${NC}"
 fi
 

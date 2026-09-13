@@ -15,7 +15,8 @@ const (
 	generationBackoff  = 750 * time.Millisecond
 )
 
-// GenerationCost asks OpenRouter what a finished generation cost, in USD.
+// GenerationCost asks OpenRouter, the TTS provider, what a finished generation
+// cost, in USD. Only OpenRouter hands out generation IDs to ask about.
 // OpenRouter prices a generation a few seconds after serving it, so the
 // lookup keeps retrying for a while before giving up.
 func (c *Client) GenerationCost(ctx context.Context, id string) (float64, error) {
@@ -42,7 +43,7 @@ func (c *Client) GenerationCost(ctx context.Context, id string) (float64, error)
 }
 
 func (c *Client) fetchGenerationCost(ctx context.Context, id string) (float64, error) {
-	resp, err := c.do(ctx, http.MethodGet, c.baseURL+generationPath+"?id="+url.QueryEscape(id), nil)
+	resp, err := c.do(ctx, c.cfg.TTS, http.MethodGet, generationPath+"?id="+url.QueryEscape(id), nil)
 	if err != nil {
 		return 0, err
 	}

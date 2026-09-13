@@ -21,9 +21,9 @@ import (
 	"github.com/mhrlife/nutshell/internal/agent/claudecode"
 	"github.com/mhrlife/nutshell/internal/browser"
 	"github.com/mhrlife/nutshell/internal/cli"
+	"github.com/mhrlife/nutshell/internal/config"
 	"github.com/mhrlife/nutshell/internal/server"
 	"github.com/mhrlife/nutshell/internal/settings"
-	"github.com/mhrlife/nutshell/internal/speech"
 	"github.com/mhrlife/nutshell/internal/web"
 )
 
@@ -59,39 +59,36 @@ func main() {
 }
 
 func run(logger *slog.Logger, level *slog.LevelVar) error {
-	opts, err := cli.Parse(os.Args[1:], os.Getenv, os.Stderr)
+	opts, err := cli.Parse(os.Args[1:], os.Stderr)
 	if err != nil {
 		return err
 	}
 
-	if opts.Version {
-		fmt.Fprintf(os.Stdout, "%s (%s, %s)\n", version, commit, date)
-
-		return nil
-	}
-
-	if opts.Debug {
-		// --debug adds the per-request, per-turn and per-OpenRouter-call
-		// detail that explains a UI which looks like it did nothing at all.
-		level.Set(slog.LevelDebug)
+	if done, err := runCommand(opts); done {
+		return err
 	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	ag, err := newAgent(opts, logger)
+	cfg, cfgPath, err := loadConfig(ctx, logger, opts)
+	if err != nil {
+		return err
+	}
+
+	if cfg.Debug {
+		// Debug adds the per-request, per-turn and per-speech-call detail
+		// that explains a UI which looks like it did nothing at all.
+		level.Set(slog.LevelDebug)
+	}
+
+	ag, err := newAgent(cfg.Agent, logger)
 	if err != nil {
 		return err
 	}
 	defer ag.Close() //nolint:errcheck // best-effort cleanup at exit
 
-	sp := speech.New(speech.Config{
-		APIKey: opts.APIKey, STTModel: opts.STTModel, SummaryModel: opts.SummaryModel,
-		TTSModel: opts.TTSModel, Voice: opts.TTSVoice, Style: speech.ResolveStyle(opts.TTSStyle),
-	}, logger)
-	if !sp.Enabled() {
-		logger.WarnContext(ctx, "no OpenRouter key (set OPENROUTER_API_KEY or --openrouter-key); voice is off, typing still works")
-	}
+	sp := newSpeech(ctx, logger, cfg, cfgPath)
 
 	cwd, err := os.Getwd()
 	if err != nil {
@@ -104,10 +101,10 @@ func run(logger *slog.Logger, level *slog.LevelVar) error {
 	}
 
 	store := settings.New(settingsPath)
-	cfg := server.Config{Lang: opts.Lang, Project: filepath.Base(cwd)}
-	handler := server.New(ag, sp, store, http.FS(web.FS()), cfg, logger)
+	srvCfg := server.Config{Lang: cfg.Lang, Project: filepath.Base(cwd)}
+	handler := server.New(ag, sp, store, http.FS(web.FS()), srvCfg, logger)
 
-	ln, err := listen(ctx, logger, opts.Port)
+	ln, err := listen(ctx, logger, cfg.Port)
 	if err != nil {
 		return err
 	}
@@ -123,13 +120,13 @@ func run(logger *slog.Logger, level *slog.LevelVar) error {
 
 	go func() { errCh <- httpSrv.Serve(ln) }()
 
-	logger.InfoContext(ctx, "ready", "url", url, "agent", ag.Name(), "dir", cwd, "settings", settingsPath)
+	logger.InfoContext(ctx, "ready", "url", url, "agent", ag.Name(), "dir", cwd, "config", cfgPath, "settings", settingsPath)
 
-	if len(opts.AgentArgs) > 0 {
-		logger.InfoContext(ctx, "forwarding to agent", "args", strings.Join(opts.AgentArgs, " "))
+	if len(cfg.Agent.Args) > 0 {
+		logger.InfoContext(ctx, "forwarding to agent", "args", strings.Join(cfg.Agent.Args, " "))
 	}
 
-	if !opts.NoOpen {
+	if cfg.OpenBrowser {
 		openBrowser(ctx, logger, url)
 	}
 
@@ -145,6 +142,29 @@ func run(logger *slog.Logger, level *slog.LevelVar) error {
 	defer cancel()
 
 	return httpSrv.Shutdown(shutdownCtx)
+}
+
+// runCommand runs what the command line asked for instead of the UI, and
+// reports whether it did. Output goes to stdout alone, so a script can use it:
+// $EDITOR "$(nutshell config path)".
+func runCommand(opts cli.Options) (bool, error) {
+	switch {
+	case opts.Version:
+		fmt.Fprintf(os.Stdout, "%s (%s, %s)\n", version, commit, date)
+
+		return true, nil
+	case opts.Command == cli.CommandConfigPath:
+		path, err := config.DefaultPath()
+		if err != nil {
+			return true, err
+		}
+
+		fmt.Fprintln(os.Stdout, path)
+
+		return true, nil
+	default:
+		return false, nil
+	}
 }
 
 // openBrowser shows the UI. Failing to is only worth a warning: the URL is
@@ -168,25 +188,25 @@ const (
 // defaultClaudeBin is the Claude Code CLI's own name on PATH.
 const defaultClaudeBin = "claude"
 
-// newAgent picks the agent implementation named by the flags.
-func newAgent(opts cli.Options, logger *slog.Logger) (agent.Agent, error) {
-	launch, err := launchFor(opts.Agent)
+// newAgent picks the agent implementation the configuration names.
+func newAgent(cfg config.Agent, logger *slog.Logger) (agent.Agent, error) {
+	launch, err := launchFor(cfg.Name)
 	if err != nil {
 		return nil, err
 	}
 
-	argv := agentCommand(opts.AgentBin, launch)
+	argv := agentCommand(cfg.Bin, launch)
 	if len(argv) == 0 {
 		return nil, fmt.Errorf(
-			"--agent %s needs --agent-bin naming the host command, for example "+
-				`--agent-bin "divar-copilot agent"`, opts.Agent)
+			"agent %s needs agent.bin (or --agent-bin) naming the host command, for example "+
+				`--agent-bin "divar-copilot agent"`, cfg.Name)
 	}
 
 	if _, err := exec.LookPath(argv[0]); err != nil {
 		return nil, fmt.Errorf("agent executable: %w", err)
 	}
 
-	return claudecode.New(argv, launch, opts.AgentArgs, logger), nil
+	return claudecode.New(argv, launch, cfg.Args, logger), nil
 }
 
 func launchFor(name string) (claudecode.Launch, error) {
@@ -201,7 +221,7 @@ func launchFor(name string) (claudecode.Launch, error) {
 	}
 }
 
-// agentCommand turns --agent-bin into the argv that starts the agent. A wrapper
+// agentCommand turns agent.bin into the argv that starts the agent. A wrapper
 // host is named together with its subcommand, so its value is split on spaces;
 // a direct launch keeps the value whole, because it is one executable path.
 func agentCommand(bin string, launch claudecode.Launch) []string {

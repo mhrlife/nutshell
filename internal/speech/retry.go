@@ -1,6 +1,6 @@
 package speech
 
-// OpenRouter, and the providers behind it, fail now and then: a connection
+// Speech providers, and the upstreams behind them, fail now and then: a connection
 // drops, an overloaded upstream answers 502, a rate limit kicks in. Losing a
 // four-minute recording to one of those is the worst thing the voice path can
 // do, so every call gets two more tries before its failure reaches the user.
@@ -22,10 +22,10 @@ const (
 
 // ErrUnavailable marks a call that kept failing, for reasons another try
 // might have fixed, until every attempt was spent: the trouble was reaching
-// OpenRouter, not the request itself.
-var ErrUnavailable = errors.New("speech: openrouter is unavailable")
+// the provider, not the request itself.
+var ErrUnavailable = errors.New("speech: the provider is unavailable")
 
-// StatusError is a failure OpenRouter reported, either as the HTTP status of
+// StatusError is a failure the provider reported, either as the HTTP status of
 // its reply or inside a reply that arrived as 200.
 type StatusError struct {
 	Code    int
@@ -33,7 +33,7 @@ type StatusError struct {
 }
 
 func (e *StatusError) Error() string {
-	return fmt.Sprintf("openrouter %d: %s", e.Code, e.Message)
+	return fmt.Sprintf("speech provider %d: %s", e.Code, e.Message)
 }
 
 // retry runs call until it succeeds, fails in a way another try cannot fix,
@@ -50,7 +50,7 @@ func (c *Client) retry(ctx context.Context, model string, call func() error) err
 			return fmt.Errorf("%w (tried %d times): %w", ErrUnavailable, attempts, err)
 		}
 
-		c.logger.WarnContext(ctx, "openrouter call failed, trying again", "model", model, "attempt", attempt, "error", err)
+		c.logger.WarnContext(ctx, "speech call failed, trying again", "model", model, "attempt", attempt, "error", err)
 
 		select {
 		case <-ctx.Done():
