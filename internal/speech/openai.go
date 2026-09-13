@@ -125,8 +125,8 @@ func (c *Client) openaiSpeech(ctx context.Context, input string) (io.ReadCloser,
 // openaiChatSpeech asks /chat/completions for its reply as audio, which is the
 // only way LiteLLM serves Gemini's TTS models. The audio comes back whole, as
 // base64 inside the JSON, not as a stream: the browser asks for a clip in
-// sentence-sized pieces, several at once, so it is only the first piece whose
-// words wait for all of its audio.
+// pieces, several at once, the first of them short, so it is only the first
+// piece whose words wait for all of its audio.
 func (c *Client) openaiChatSpeech(ctx context.Context, input string) (io.ReadCloser, string, error) {
 	body := map[string]any{
 		"model":      c.cfg.TTS.Model,

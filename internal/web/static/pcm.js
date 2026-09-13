@@ -22,13 +22,19 @@ const PCM_LEAD = 0.08; // seconds of headroom taken when playback (re)starts
 const PCM_FULL_SCALE = 0x8000; // a 16-bit sample at full deflection
 
 // Characters in a piece. The voice starts afresh at every piece, and its tone
-// with it, so a piece is only ever cut where a sentence ends: sentences are
-// gathered until they reach min, and a piece is closed early only when the next
-// sentence would take it past max. The first piece is kept short, because
-// nothing at all can be heard until it is here; the rest are longer, which
-// reads better and costs fewer requests.
+// with it, so a piece is only ever cut where a sentence ends, and where a
+// paragraph ends when one is near. The first piece is kept short, because
+// nothing at all can be heard until it is here: sentences are gathered until
+// they reach its min. Every piece after it is filled for as long as it can be
+// voiced before the pieces ahead of it have been heard: a voice takes about
+// half as long to generate a character as to say it, so a piece may hold as
+// much as all the pieces before it together plus one first piece, which holds
+// even at double speed — 100, 200, 400, 800 characters, and no more than
+// SPEECH_LONGEST. A last piece shorter than SPEECH_TAIL goes with the one
+// before it.
 const SPEECH_FIRST = { min: 30, max: 100 };
-const SPEECH_REST = { min: 70, max: 300 };
+const SPEECH_LONGEST = 800;
+const SPEECH_TAIL = 70;
 const SPEECH_AHEAD = 2; // pieces asked for beyond the one being poured in
 
 let voiceCtx = null;
@@ -237,33 +243,53 @@ class Voice {
 // speechPieces cuts text into the pieces that are each read on their own, at
 // sentence ends and line breaks (see SENTENCE_END in speakable.js). A sentence
 // longer than a whole piece is the one thing cut inside a sentence: at its last
-// comma that fits, or failing that its last space.
+// comma that fits, or failing that its last space. A piece that runs out of
+// room ends at its last line break instead, when that keeps at least half of
+// it (min), and the rest of that paragraph starts the next piece.
 function speechPieces(text) {
   const pieces = [];
+  let spoken = 0; // characters in pieces
   let current = '';
   let lead = ''; // what separated current from the piece before it
-  const limits = () => (pieces.length ? SPEECH_REST : SPEECH_FIRST);
-  const close = () => { if (current) pieces.push(current); current = ''; };
+  let paragraph = 0; // where in current its last line break is, 0 for none
+  let paragraphGap = '';
+  const limits = () => {
+    if (!pieces.length) return SPEECH_FIRST;
+    const max = Math.min(SPEECH_LONGEST, spoken + SPEECH_FIRST.max);
+    return { min: Math.floor(max / 2), max };
+  };
+  const push = (piece) => { pieces.push(piece); spoken += piece.length; };
+  const close = () => { if (current) push(current); current = ''; paragraph = 0; };
 
   const parts = text.trim().split(SENTENCE_END);
   for (let i = 0; i < parts.length; i += 2) {
     let sentence = parts[i].trim();
     if (!sentence) continue;
     const gap = i && /\n/.test(parts[i - 1]) ? (/\n\s*\n/.test(parts[i - 1]) ? '\n\n' : '\n') : ' ';
-    if (current && current.length + gap.length + sentence.length > limits().max) close();
+    const overflows = () => current && current.length + gap.length + sentence.length > limits().max;
+    if (overflows() && paragraph >= limits().min) {
+      const rest = current.slice(paragraph + paragraphGap.length);
+      current = current.slice(0, paragraph);
+      close();
+      current = rest;
+      lead = paragraphGap;
+    }
+    if (overflows()) close();
     while (!current && sentence.length > limits().max) {
       const cut = cutWithin(sentence, limits());
-      pieces.push(sentence.slice(0, cut).trim());
+      push(sentence.slice(0, cut).trim());
       sentence = sentence.slice(cut).trim();
     }
     if (!current) lead = gap;
+    else if (gap !== ' ') { paragraph = current.length; paragraphGap = gap; }
     current = current ? current + gap + sentence : sentence;
-    if (current.length >= limits().min) close();
+    if (!pieces.length && current.length >= SPEECH_FIRST.min) close();
   }
 
   // what is left is too short to stand alone: it goes with the piece before
   const last = pieces[pieces.length - 1];
-  if (current && last && last.length + lead.length + current.length <= SPEECH_REST.max) pieces[pieces.length - 1] = last + lead + current;
+  const joined = last && last.length + lead.length + current.length;
+  if (current && last && current.length < SPEECH_TAIL && joined <= SPEECH_LONGEST) pieces[pieces.length - 1] = last + lead + current;
   else close();
   return pieces.length ? pieces : [text];
 }
