@@ -168,10 +168,10 @@ function renderMarker(thread) {
   node.querySelector('.side-label').textContent = thread.closed ? t('threadClosed') : t('threadOpen');
   const title = node.querySelector('.side-title');
   title.textContent = oneLine(thread.title) || t('threadUntitled');
-  title.dir = isRTL(thread.title) ? 'rtl' : 'ltr';
+  title.dir = textDir(thread.title);
   const note = node.querySelector('.side-note');
   note.textContent = thread.conclusion || '';
-  note.dir = isRTL(thread.conclusion) ? 'rtl' : 'ltr';
+  note.dir = textDir(thread.conclusion);
   note.hidden = !thread.conclusion;
 }
 
@@ -203,7 +203,7 @@ function renderTrail() {
     crumb.className = 'crumb';
     crumb.dataset.id = thread.id;
     crumb.textContent = crumbLabel(thread);
-    crumb.dir = thread.id === ROOT ? (document.documentElement.dir || 'ltr') : (isRTL(thread.title) ? 'rtl' : 'ltr');
+    crumb.dir = thread.id === ROOT ? (document.documentElement.dir || 'ltr') : textDir(thread.title);
     crumb.disabled = i === path.length - 1;
     trail.appendChild(crumb);
   });

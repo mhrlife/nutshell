@@ -59,12 +59,9 @@ type Config struct {
 	// SummaryModel is the chat model that shortens a selected passage before
 	// it is spoken, e.g. google/gemini-3.8-flash.
 	SummaryModel string
-	TTSModel     string // text-to-speech model, e.g. x-ai/grok-voice-tts-1.0
+	TTSModel     string // text-to-speech model, e.g. google/gemini-3.1-flash-tts-preview
 	Voice        string // voice name understood by TTSModel
 	Style        string // delivery instructions placed before the transcript, see ResolveStyle
-	// Speed multiplies how fast the voice talks; 0 and 1 leave the model's
-	// own pace. x-ai/grok-voice-tts-1.0 accepts 0.7 to 1.5.
-	Speed float64
 }
 
 // Client talks to OpenRouter. The zero value is disabled.
@@ -184,7 +181,7 @@ func (c *Client) chatOnce(ctx context.Context, model string, messages []any) (st
 // text is written in, so the voice reads it the way that language is spoken
 // rather than sounding out foreign words. The caller closes the clip.
 func (c *Client) Speak(ctx context.Context, text string, l lang.Language) (Clip, error) {
-	body := c.speechRequest(c.speechInput(text, l))
+	body := c.speechRequest(SpeakInstructions(c.cfg.Style, l) + text)
 
 	var clip Clip
 
@@ -234,38 +231,14 @@ type cappedBody struct {
 	io.Closer
 }
 
-// speechInput is what the voice is handed to say text in l: the delivery
-// instructions, then the text. The browser marks up what it sends with speech
-// tags, so a voice that does not perform them gets the text without, rather
-// than reading every tag out.
-func (c *Client) speechInput(text string, l lang.Language) string {
-	if !speaksTags(c.cfg.TTSModel) {
-		text = stripSpeechTags(text)
-	}
-
-	return SpeakInstructions(c.cfg.Style, l) + text
-}
-
 // speechRequest is the /audio/speech body that reads input aloud.
 func (c *Client) speechRequest(input string) map[string]any {
-	body := map[string]any{
+	return map[string]any{
 		"model":           c.cfg.TTSModel,
 		"input":           input,
 		"voice":           c.cfg.Voice,
 		"response_format": "pcm",
 	}
-
-	if c.cfg.Speed != 0 && c.cfg.Speed != 1 {
-		// OpenRouter documents a top-level speed, but does not hand it on to
-		// xAI: x-ai/grok-voice-tts-1.0 only speeds up when the value travels
-		// as an xAI provider option. Other providers ignore that option.
-		body["speed"] = c.cfg.Speed
-		body["provider"] = map[string]any{
-			"options": map[string]any{"xai": map[string]any{"speed": c.cfg.Speed}},
-		}
-	}
-
-	return body
 }
 
 func (c *Client) post(ctx context.Context, url string, body any) (*http.Response, error) {

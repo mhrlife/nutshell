@@ -118,7 +118,7 @@ func (f fakeSpeech) Speak(_ context.Context, _ string, l lang.Language) (speech.
 func (f fakeSpeech) Summarize(_ context.Context, passage string, l lang.Language) (speech.Summary, error) {
 	text := l.Code + " summary of " + passage
 
-	return speech.Summary{Text: text, Speech: "[pause] " + text, CostUSD: 0.0003}, nil
+	return speech.Summary{Text: text, CostUSD: 0.0003}, nil
 }
 
 func (f fakeSpeech) GenerationCost(_ context.Context, id string) (float64, error) {

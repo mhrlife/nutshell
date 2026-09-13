@@ -128,13 +128,13 @@ function renderStep(prompt, question, index, total) {
   const detail = prompt.detail ? `<pre class="prompt-detail" dir="ltr">${escapeHTML(prompt.detail)}</pre>` : '';
 
   const label = question.label ? `<span class="label">${escapeHTML(question.label)}</span>` : '';
-  const text = question.text ? `<p class="prompt-question" dir="auto">${escapeHTML(question.text)}</p>` : '';
+  const text = question.text ? `<p class="prompt-question" dir="${textDir(question.text)}">${escapeHTML(question.text)}</p>` : '';
 
   const options = (question.options || []).map((option) => choiceButton(option.id, optionLabel(option), option.detail));
   if (question.freeText) options.push(choiceButton(OTHER_OPTION, t('promptOther'), ''));
 
   const typed = question.freeText
-    ? `<div class="prompt-text" hidden><textarea rows="2" dir="auto" placeholder="${t('promptTyped')}"></textarea></div>`
+    ? `<div class="prompt-text" hidden><textarea rows="2" dir="${document.documentElement.dir === 'rtl' ? 'rtl' : 'auto'}" placeholder="${t('promptTyped')}"></textarea></div>`
     : '';
 
   return `<div class="prompt-card" role="dialog" aria-modal="true">
@@ -150,8 +150,8 @@ function renderStep(prompt, question, index, total) {
 
 function choiceButton(id, label, detail) {
   return `<button type="button" class="choice" data-option="${escapeHTML(id)}">
-      <span class="choice-label" dir="auto">${escapeHTML(label)}</span>
-      ${detail ? `<span class="choice-detail" dir="auto">${escapeHTML(detail)}</span>` : ''}
+      <span class="choice-label" dir="${textDir(label)}">${escapeHTML(label)}</span>
+      ${detail ? `<span class="choice-detail" dir="${textDir(detail)}">${escapeHTML(detail)}</span>` : ''}
     </button>`;
 }
 

@@ -56,7 +56,6 @@ func TestSummarize(t *testing.T) {
 
 	body, _ := io.ReadAll(resp.Body)
 	if !strings.Contains(string(body), `"text":"fa summary of a long passage"`) ||
-		!strings.Contains(string(body), `"speech":"[pause] fa summary of a long passage"`) ||
 		!strings.Contains(string(body), `"cost_usd":0.0003`) {
 		t.Errorf("summarize: %s", body)
 	}

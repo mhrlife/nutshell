@@ -4,9 +4,9 @@
 // word grows with the length of the passage — about two seconds plus three or
 // four hundredths of a second a character, and streaming the reply does not
 // change that. A seven-hundred-character answer asked for in one piece is
-// twenty seconds of silence; cut into pieces of seventy-odd characters, the
-// first one arrives in three to eight seconds and speaks for five, by which
-// time the pieces behind it — two more are always on the way — have arrived.
+// twenty seconds of silence; with a short first piece, the first words arrive
+// in a few seconds, and the pieces behind it — asked for at the same time, and
+// two more always on the way after that — arrive while it is being heard.
 // So a Voice takes the pieces in the order they are spoken and lays them end
 // to end on the Web Audio clock, and what the players in app.js, clips.js and
 // narrator.js hold is one clip that grows while it plays — play, pause,
@@ -21,12 +21,14 @@ const PCM_RATE = 24000; // what the server sends, when it does not say
 const PCM_LEAD = 0.08; // seconds of headroom taken when playback (re)starts
 const PCM_FULL_SCALE = 0x8000; // a 16-bit sample at full deflection
 
-// Characters a piece may hold. The opening pieces are the shortest that still
-// read as speech, because nothing at all can be heard until the first of them
-// is here; from the fourth on there is enough audio in hand to cover a longer
-// piece, and a longer piece reads better and costs one fewer request.
-const SPEECH_OPENING = [70, 70, 70];
-const SPEECH_PIECE = 130;
+// Characters in a piece. The voice starts afresh at every piece, and its tone
+// with it, so a piece is only ever cut where a sentence ends: sentences are
+// gathered until they reach min, and a piece is closed early only when the next
+// sentence would take it past max. The first piece is kept short, because
+// nothing at all can be heard until it is here; the rest are longer, which
+// reads better and costs fewer requests.
+const SPEECH_FIRST = { min: 30, max: 100 };
+const SPEECH_REST = { min: 70, max: 300 };
 const SPEECH_AHEAD = 2; // pieces asked for beyond the one being poured in
 
 let voiceCtx = null;
@@ -232,39 +234,69 @@ class Voice {
   }
 }
 
-// speechPieces cuts text into the pieces that are each read on their own: at
-// sentence ends, then at commas, and inside a clause too long for a piece at
-// its words (see speakable.js). The voice starts afresh at every piece, so the
-// cuts go where a speaker would draw breath anyway. An emphasis a cut leaves
-// open is closed and reopened, or the voice would read the tag out.
+// speechPieces cuts text into the pieces that are each read on their own, at
+// sentence ends and line breaks (see SENTENCE_END in speakable.js). A sentence
+// longer than a whole piece is the one thing cut inside a sentence: at its last
+// comma that fits, or failing that its last space.
 function speechPieces(text) {
   const pieces = [];
   let current = '';
-  const room = () => SPEECH_OPENING[pieces.length] || SPEECH_PIECE;
-  const add = (part) => {
-    if (current && current.length + 1 + part.length > room()) { pieces.push(current); current = ''; }
-    current = current ? `${current} ${part}` : part;
-  };
-  for (const sentence of sentences(text)) {
-    if (sentence.length <= room()) { add(sentence); continue; }
-    for (const clause of sentence.split(/(?<=[،,;:])\s+/)) {
-      if (clause.length <= SPEECH_PIECE) add(clause);
-      else byWords(clause, SPEECH_PIECE).forEach(add);
+  let lead = ''; // what separated current from the piece before it
+  const limits = () => (pieces.length ? SPEECH_REST : SPEECH_FIRST);
+  const close = () => { if (current) pieces.push(current); current = ''; };
+
+  const parts = text.trim().split(SENTENCE_END);
+  for (let i = 0; i < parts.length; i += 2) {
+    let sentence = parts[i].trim();
+    if (!sentence) continue;
+    const gap = i && /\n/.test(parts[i - 1]) ? (/\n\s*\n/.test(parts[i - 1]) ? '\n\n' : '\n') : ' ';
+    if (current && current.length + gap.length + sentence.length > limits().max) close();
+    while (!current && sentence.length > limits().max) {
+      const cut = cutWithin(sentence, limits());
+      pieces.push(sentence.slice(0, cut).trim());
+      sentence = sentence.slice(cut).trim();
     }
+    if (!current) lead = gap;
+    current = current ? current + gap + sentence : sentence;
+    if (current.length >= limits().min) close();
   }
-  if (current) pieces.push(current);
-  return balanceEmphasis(pieces.length ? pieces : [text]);
+
+  // what is left is too short to stand alone: it goes with the piece before
+  const last = pieces[pieces.length - 1];
+  if (current && last && last.length + lead.length + current.length <= SPEECH_REST.max) pieces[pieces.length - 1] = last + lead + current;
+  else close();
+  return pieces.length ? pieces : [text];
+}
+
+// cutWithin is where to cut a sentence so the part before holds between min
+// and max characters: after its last comma, semicolon or colon in that range,
+// else at its last space, else at max.
+function cutWithin(sentence, { min, max }) {
+  const reach = sentence.slice(0, max + 1);
+  const clause = Math.max(0, ...[...reach.matchAll(/[،,;:](?=\s)/g)].map((m) => m.index + 1));
+  if (clause >= min) return clause;
+  const space = reach.lastIndexOf(' ');
+  return space > 0 ? space : max;
 }
 
 // speakClip has text read aloud and comes back with the clip as soon as its
-// first piece is on its way, the rest following it in. onGeneration is told
-// what each piece was billed as, once per piece.
+// first piece is on its way, the rest following it in. The pieces right behind
+// the first are asked for with it, so they are voiced while it is. onGeneration
+// is told what each piece was billed as, once per piece.
 async function speakClip(text, onGeneration) {
-  const pieces = speechPieces(text);
-  const first = await askPiece(pieces[0], true); // a refusal is the caller's to report
+  const pieces = speechPieces(speakableText(text));
+  const asked = [];
+  const ask = (i) => {
+    if (i >= pieces.length || asked[i]) return;
+    asked[i] = askPiece(pieces[i], i === 0);
+    asked[i].catch(() => {}); // it is answered for where it is awaited
+  };
+  for (let i = 0; i <= SPEECH_AHEAD; i++) ask(i);
+
+  const first = await asked[0]; // a refusal is the caller's to report
   const voice = new Voice(first.rate);
   voice.onfail = (err) => logIssue('warn', 'speak', errText(err)); // a clip that stops early
-  pourPieces(voice, pieces, first, onGeneration);
+  pourPieces(voice, pieces.length, asked, ask, onGeneration);
 
   return voice;
 }
@@ -292,20 +324,13 @@ async function askPiece(text, next) {
   return piece;
 }
 
-// pourPieces fills the voice from every piece in the order they are spoken,
-// keeping the next few on the way: a piece that comes back early waits its
-// turn. It is left to run on its own — the caller already has the clip and
-// plays what is in it.
-async function pourPieces(voice, pieces, first, onGeneration) {
-  const asked = [first];
-  const ask = (i) => {
-    if (i >= pieces.length || asked[i]) return;
-    asked[i] = askPiece(pieces[i]);
-    asked[i].catch(() => {}); // it is answered for where it is awaited, below
-  };
-
+// pourPieces fills the voice from all count pieces in the order they are
+// spoken, asking for the next few through ask: a piece that comes back early
+// waits its turn in asked. It is left to run on its own — the caller already
+// has the clip and plays what is in it.
+async function pourPieces(voice, count, asked, ask, onGeneration) {
   try {
-    for (let i = 0; i < pieces.length; i++) {
+    for (let i = 0; i < count; i++) {
       for (let j = i + 1; j <= i + SPEECH_AHEAD; j++) ask(j);
       const piece = await asked[i];
       if (onGeneration) onGeneration(piece.generation);

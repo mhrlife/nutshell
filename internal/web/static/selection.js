@@ -63,7 +63,7 @@ function setQuote(passage) {
   quote = passage;
   const text = quoteBox.querySelector('.quote-text');
   text.textContent = oneLine(passage);
-  text.dir = isRTL(passage) ? 'rtl' : 'ltr';
+  text.dir = textDir(passage);
   quoteBox.querySelector('.quote-clear').innerHTML = ICONS.close;
   quoteBox.querySelector('.quote-clear').title = t('quoteClear');
   quoteBox.hidden = !passage;

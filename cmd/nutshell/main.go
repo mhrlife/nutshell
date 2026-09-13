@@ -88,7 +88,6 @@ func run(logger *slog.Logger, level *slog.LevelVar) error {
 	sp := speech.New(speech.Config{
 		APIKey: opts.APIKey, STTModel: opts.STTModel, SummaryModel: opts.SummaryModel,
 		TTSModel: opts.TTSModel, Voice: opts.TTSVoice, Style: speech.ResolveStyle(opts.TTSStyle),
-		Speed: opts.TTSSpeed,
 	}, logger)
 	if !sp.Enabled() {
 		logger.WarnContext(ctx, "no OpenRouter key (set OPENROUTER_API_KEY or --openrouter-key); voice is off, typing still works")

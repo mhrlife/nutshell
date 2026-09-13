@@ -72,10 +72,19 @@ function isRTL(text) {
   return m.index < l.index;
 }
 
-// dirFor picks a direction for a text box: what the text itself says, or the
+// textDir picks the direction a block of text is shown in. An RTL interface
+// shows all of it right to left, even a line that opens with a Latin word (a
+// PR, a file name): the conversation is in its language whatever the first
+// word is. Otherwise the text's own script decides.
+function textDir(text) {
+  if (document.documentElement.dir === 'rtl') return 'rtl';
+  return isRTL(text) ? 'rtl' : 'ltr';
+}
+
+// dirFor picks a direction for a text box: textDir of what is in it, or the
 // interface language while the box is still empty, so the placeholder reads
 // the right way round.
 function dirFor(text) {
   if (!text) return document.documentElement.dir || 'ltr';
-  return isRTL(text) ? 'rtl' : 'ltr';
+  return textDir(text);
 }
