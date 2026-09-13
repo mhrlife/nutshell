@@ -43,6 +43,9 @@ function applyLanguage() {
   el.settingsBtn.innerHTML = ICONS.gear;
   el.settingsBtn.title = t('settings');
   turns.forEach(renderMeta);
+  turns.forEach(renderDirs);
+  if (selected && selected.answer) el.docBody.dir = textDir(selected.answer.full);
+  el.input.dir = dirFor(el.input.value);
   turns.forEach((turn) => turn.clips.forEach(renderClip));
   renderThreads();
   renderNarrator();
@@ -113,9 +116,9 @@ function addTurn(id, thread, data) {
   if (data.selection) {
     const about = node.querySelector('.q-quote');
     about.textContent = oneLine(data.selection);
-    about.dir = isRTL(data.selection) ? 'rtl' : 'ltr';
     about.hidden = false;
   }
+  renderDirs(turn);
   el.transcript.appendChild(node);
   turns.push(turn);
   if (turn.thread === current) select(turn);
@@ -131,7 +134,7 @@ function showActivity(turn, kind, text) {
   box.innerHTML = `<span class="k"></span><span class="${think ? 'think' : 'v'}"></span>`;
   box.querySelector('.k').textContent = think ? t('think') : kind.toLowerCase();
   box.querySelector(think ? '.think' : '.v').textContent = text;
-  if (think) box.querySelector('.think').dir = 'auto';
+  if (think) box.querySelector('.think').dir = textDir(text);
   scrollToEnd();
 }
 
@@ -141,6 +144,7 @@ function finishTurn(turn, answer) {
   const summary = turn.node.querySelector('.summary');
   summary.textContent = plainText(answer.summary);
   summary.hidden = false;
+  renderDirs(turn);
   turn.node.querySelector('.meta').hidden = false;
   turn.cost.agent = answer.cost_known ? answer.cost_usd : null;
   turn.cost.agentKnown = !!answer.cost_known;
@@ -160,6 +164,7 @@ function failTurn(turn, message) {
   const box = turn.node.querySelector('.error');
   box.textContent = message;
   box.hidden = false;
+  renderDirs(turn);
   scrollToEnd();
 }
 
@@ -169,6 +174,12 @@ function turnQuestion(turn, text) {
   if (turn.closing) return t('threadSummingUp');
   if (turn.unasked) return t('backgroundDone');
   return text;
+}
+
+// renderDirs points each of a turn's text blocks the way textDir says, which
+// under an RTL interface is right to left whatever they open with.
+function renderDirs(turn) {
+  for (const box of turn.node.querySelectorAll('.q, .q-quote, .summary, .error')) box.dir = textDir(box.textContent);
 }
 
 function renderMeta(turn) {
@@ -205,7 +216,7 @@ function renderDoc() {
   renderNarrator();
   if (!has) return;
   el.docBody.innerHTML = marked.parse(selected.answer.full || '');
-  el.docBody.dir = isRTL(selected.answer.full) ? 'rtl' : 'ltr';
+  el.docBody.dir = textDir(selected.answer.full);
   renderCostChip(el.docCost, selected.cost, t('costTurn'), agentName());
   el.doc.scrollTop = 0;
 }

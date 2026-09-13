@@ -56,7 +56,6 @@ function addClip(turn, passage, kind) {
   const clip = { turn, kind, passage, text: '', audio: null, error: '', status: kind === 'summary' ? 'summarizing' : 'voicing', node };
   const quoted = node.querySelector('.clip-quote');
   quoted.textContent = oneLine(passage);
-  quoted.dir = isRTL(passage) ? 'rtl' : 'ltr';
   turn.clips.push(clip);
   const box = turn.node.querySelector('.clips');
   box.appendChild(node);
@@ -86,9 +85,10 @@ function renderClip(clip) {
   const label = { summarizing: t('clipSummarizing'), voicing: t('clipVoicing'), failed: clip.error }[status];
   node.querySelector('.clip-label').textContent = label || t(clip.kind === 'summary' ? 'clipSummary' : 'clipRead');
 
+  node.querySelector('.clip-quote').dir = textDir(clip.passage);
   const text = node.querySelector('.clip-text');
   text.textContent = clip.text;
-  text.dir = isRTL(clip.text) ? 'rtl' : 'ltr';
+  text.dir = textDir(clip.text);
   text.hidden = !clip.text;
 }
 

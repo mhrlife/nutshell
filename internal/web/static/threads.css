@@ -12,7 +12,7 @@
   color: var(--muted);
 }
 
-.crumb { border-radius: 4px; padding: 2px 6px; max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; unicode-bidi: plaintext; }
+.crumb { border-radius: 4px; padding: 2px 6px; max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 .crumb:hover:not(:disabled) { color: var(--ink); background: rgba(42, 38, 34, 0.06); }
 
@@ -50,14 +50,14 @@ html[dir="rtl"] .trail-sep::before { content: '‹'; }
 
 html[dir="rtl"] .side-label { letter-spacing: 0; text-transform: none; font-family: var(--fa); }
 
-.side-title { min-width: 0; font-size: 13px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; unicode-bidi: plaintext; text-align: start; }
+.side-title { min-width: 0; font-size: 13px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: start; }
 
 .side.closed { border-inline-start-style: solid; }
 
 .side.closed .side-label { color: var(--accent); }
 
 /* what the side thread settled, which is all the thread above ever hears */
-.side-note { font-size: 14px; line-height: 1.6; color: var(--ink-2); text-wrap: pretty; unicode-bidi: plaintext; text-align: start; }
+.side-note { font-size: 14px; line-height: 1.6; color: var(--ink-2); text-wrap: pretty; text-align: start; }
 
 .side-note:dir(rtl) { font-family: var(--fa); }
 

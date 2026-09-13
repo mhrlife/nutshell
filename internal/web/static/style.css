@@ -34,11 +34,11 @@ body {
 }
 
 html[dir="rtl"] body { font-family: var(--fa); }
-
-/* text blocks pick their font from their own direction */
+/* text blocks pick their font from their own direction, which an RTL interface makes RTL for all of them (textDir); only an LTR one lets each paragraph of mixed text turn the way its first word reads */
 .q:dir(rtl), .summary:dir(rtl), .md:dir(rtl), .error:dir(rtl), .think:dir(rtl), #input:dir(rtl), .quote-text:dir(rtl), .q-quote:dir(rtl), .clip-quote:dir(rtl), .clip-text:dir(rtl) { font-family: var(--fa); }
 .q:dir(ltr), .summary:dir(ltr), .md:dir(ltr), .error:dir(ltr) { font-family: var(--serif), var(--fa); }
 .think:dir(ltr), #input:dir(ltr) { font-family: var(--sans), var(--fa); }
+html[dir="ltr"] :is(.q-quote, .quote-text, .clip-quote, .think, .clip-text, .crumb, .side-title, .side-note) { unicode-bidi: plaintext; }
 
 button { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; }
 
@@ -99,7 +99,7 @@ html[dir="rtl"] .empty p { font-family: var(--fa); font-style: normal; }
 .turn.unasked .q { font-style: normal; color: var(--muted-2); }
 
 /* the passage a question was about, quoted the way a chat app quotes a reply */
-.q-quote, .quote-text, .clip-quote { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; unicode-bidi: plaintext; text-align: start; }
+.q-quote, .quote-text, .clip-quote { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: start; }
 
 .q-quote { font-size: 13px; color: var(--muted); padding-inline-start: 10px; border-inline-start: 2px solid var(--muted-2); }
 
@@ -113,7 +113,7 @@ html[dir="rtl"] .empty p { font-family: var(--fa); font-style: normal; }
 
 .activity .v { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; direction: ltr; text-align: left; font-family: var(--mono); }
 
-.activity .think { white-space: normal; unicode-bidi: plaintext; text-align: start; font-family: inherit; }
+.activity .think { white-space: normal; text-align: start; font-family: inherit; }
 
 .activity.live { animation: pulse 1.6s ease-in-out infinite; }
 
@@ -138,7 +138,7 @@ html[dir="rtl"] .empty p { font-family: var(--fa); font-style: normal; }
 
 .clip-quote { font-size: 13px; color: var(--muted); padding-inline-start: 10px; border-inline-start: 2px solid var(--muted-2); }
 
-.clip-text { font-size: 14px; line-height: 1.6; color: var(--ink-2); unicode-bidi: plaintext; text-align: start; }
+.clip-text { font-size: 14px; line-height: 1.6; color: var(--ink-2); text-align: start; }
 
 .clip[data-status="summarizing"] .clip-play,
 .clip[data-status="voicing"] .clip-play,
