@@ -17,7 +17,12 @@ the same interface). Go, standard library only; the browser UI is embedded.
 - `internal/lang` – per-language rules for the agent, the transcriber and the
   voice. The browser sends its language code with every request; instructions
   are built from the entry for that code, never from all of them at once.
-- `internal/speech` – OpenRouter speech-to-text and text-to-speech.
+- `internal/config` – the configuration file (`<user config dir>/nutshell/config.json`):
+  providers, models, agent and defaults. Flags from `internal/cli` are laid
+  over it; API keys live in it, with an env variable per provider as fallback.
+- `internal/speech` – speech-to-text and text-to-speech, each role on its own
+  provider (OpenRouter by default). `client.go` is shared; each interface a
+  provider can speak has its own file: `openai.go`, `gemini.go`.
 - `internal/server` – HTTP + server-sent-events API used by the UI. Every
   request passes `guard`: loopback Host only, no cross-origin writes. The tree
   of side threads lives in `threads.go`; every log entry names the thread it

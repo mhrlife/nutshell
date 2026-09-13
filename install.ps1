@@ -155,7 +155,7 @@ if (-not (Get-Command claude -ErrorAction SilentlyContinue)) {
     Write-Host "  Install the agent CLI:   npm i -g @anthropic-ai/claude-code"
 }
 if (-not $env:OPENROUTER_API_KEY) {
-    Write-Host '  Set a key for voice:     $env:OPENROUTER_API_KEY = "sk-or-..."'
+    Write-Host '  Set a key for voice:     "api_key" in the file "nutshell config path" prints, or $env:OPENROUTER_API_KEY = "sk-or-..."'
     Write-Note '  Without it nutshell still works with typed questions.'
 }
 Write-Host "  Then, in any project:    nutshell"

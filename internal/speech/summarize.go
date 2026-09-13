@@ -18,18 +18,15 @@ type Summary struct {
 // fast chat model rather than the coding agent: the agent would add a turn to
 // the conversation for something the user only wanted to hear.
 func (c *Client) Summarize(ctx context.Context, passage string, l lang.Language) (Summary, error) {
-	messages := []any{
-		map[string]string{"role": "system", "content": SummarizeInstructions(l)},
-		map[string]string{"role": "user", "content": "<passage>\n" + passage + "\n</passage>"},
-	}
+	req := chatRequest{system: SummarizeInstructions(l), text: "<passage>\n" + passage + "\n</passage>"}
 
-	text, cost, err := c.chat(ctx, c.cfg.SummaryModel, messages)
+	text, cost, err := c.chat(ctx, c.cfg.Summary, req)
 	if err != nil {
 		return Summary{}, err
 	}
 
 	if text == "" {
-		return Summary{}, errors.New("openrouter returned an empty summary")
+		return Summary{}, errors.New("the speech provider returned an empty summary")
 	}
 
 	return Summary{Text: text, CostUSD: cost}, nil

@@ -1,6 +1,6 @@
 // Speech to text, and what happens when it fails. A recording can be minutes
 // of someone talking, and losing it to a dropped connection is the one failure
-// they cannot simply repeat. The server already retries OpenRouter, so a
+// they cannot simply repeat. The server already retries the speech provider, so a
 // failure that gets this far is a real one: the recording is kept, and the
 // footer says what went wrong and offers to send it again.
 
@@ -14,7 +14,7 @@ const unsentEl = {
 // The message for each way a transcription can come back empty-handed.
 const UNSENT_MESSAGES = {
   offline: 'unsentOffline', // nutshell itself did not answer
-  unreachable: 'unsentUnreachable', // OpenRouter kept failing through every retry
+  unreachable: 'unsentUnreachable', // the speech provider kept failing through every retry
   failed: 'unsentFailed', // anything else, shown with the error
   empty: 'unsentEmpty', // the transcript came back without a word in it
 };

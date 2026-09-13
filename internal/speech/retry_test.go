@@ -43,8 +43,10 @@ func fakeOpenRouter(t *testing.T, replies ...reply) (*Client, *atomic.Int32) {
 	}))
 	t.Cleanup(ts.Close)
 
-	c := New(Config{APIKey: "test", STTModel: "stt"}, slog.New(slog.DiscardHandler))
-	c.baseURL = ts.URL
+	c := New(Config{
+		STT: Endpoint{BaseURL: ts.URL, APIKey: "test", Model: "stt"},
+		TTS: Endpoint{BaseURL: ts.URL, APIKey: "test", Model: "tts"},
+	}, slog.New(slog.DiscardHandler))
 	c.retryDelay = time.Millisecond
 
 	return c, &calls
