@@ -25,10 +25,7 @@ async function speakPassage(turn, passage, summarize) {
       clip.speech = spokenText(out.speech || out.text);
       setClipStatus(clip, 'voicing');
     }
-    const spoken = summarize ? clip.speech : plainText(passage);
-    const resp = await postJSON('/api/speak', { text: spoken, lang: settings.lang });
-    clip.audio = URL.createObjectURL(await resp.blob());
-    priceClip(turn, resp.headers.get('X-Generation-Id'));
+    clip.audio = await speakClip(summarize ? clip.speech : plainText(passage), (id) => priceClip(turn, id));
     setClipStatus(clip, 'ready');
     // never talk over the mic, or over something started while this loaded
     if (!player && state !== 'listening' && state !== 'transcribing') play(clip.audio, null, clip);

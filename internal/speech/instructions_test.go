@@ -10,15 +10,15 @@ import (
 func TestResolveStyle(t *testing.T) {
 	t.Parallel()
 
-	if got := ResolveStyle(StyleLecture); got != LectureStyle {
-		t.Errorf("lecture preset = %q", got)
+	if got := ResolveStyle(StyleDry); got != DryStyle {
+		t.Errorf("dry preset = %q", got)
 	}
 
 	if got := ResolveStyle(StyleNone); got != "" {
 		t.Errorf("none preset = %q", got)
 	}
 
-	if got := ResolveStyle("Read slowly."); got != "Read slowly.\n" {
+	if got := ResolveStyle("Read slowly."); got != "Read slowly." {
 		t.Errorf("literal = %q", got)
 	}
 }
@@ -26,7 +26,7 @@ func TestResolveStyle(t *testing.T) {
 func TestSpeakInstructions(t *testing.T) {
 	t.Parallel()
 
-	persian := SpeakInstructions(LectureStyle, lang.Lookup("fa"))
+	persian := SpeakInstructions(DryStyle, lang.Lookup("fa"))
 	if !strings.Contains(persian, "Persian (Farsi)") {
 		t.Errorf("the voice was not told the language:\n%s", persian)
 	}
@@ -36,7 +36,13 @@ func TestSpeakInstructions(t *testing.T) {
 		t.Errorf("instructions do not end with the transcript header:\n%s", persian)
 	}
 
-	if got := SpeakInstructions(LectureStyle, lang.Lookup("xx")); !strings.HasSuffix(got, "Transcript:\n") ||
+	// The note the voice is directed by sits under its own heading, where the
+	// model looks for it.
+	if want := "# Director's note\n" + DryStyle + "\nLanguage: "; !strings.Contains(persian, want) {
+		t.Errorf("the director's note is not where it belongs:\n%s", persian)
+	}
+
+	if got := SpeakInstructions(DryStyle, lang.Lookup("xx")); !strings.HasSuffix(got, "Transcript:\n") ||
 		strings.Contains(got, "Language:") {
 		t.Errorf("a language without a note should add none:\n%s", got)
 	}

@@ -6,11 +6,13 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/mhrlife/nutshell/internal/agent"
+	"github.com/mhrlife/nutshell/internal/speech"
 )
 
 func TestAskStreamsTheTurn(t *testing.T) {
@@ -170,11 +172,16 @@ func TestTranscribeAndSpeak(t *testing.T) {
 	audio := post(t, ts.URL+"/api/speak", `{"text":"hi","lang":"fa"}`)
 	defer audio.Body.Close()
 
-	if ct := audio.Header.Get("Content-Type"); ct != "audio/wav" {
+	if ct := audio.Header.Get("Content-Type"); ct != "audio/pcm" {
 		t.Errorf("content type = %q", ct)
 	}
 
-	if clip, _ := io.ReadAll(audio.Body); string(clip) != "RIFF fa" {
+	// The browser plays the samples itself, so it has to be told their rate.
+	if rate := audio.Header.Get("X-Sample-Rate"); rate != strconv.Itoa(speech.PCMSampleRate) {
+		t.Errorf("sample rate header = %q", rate)
+	}
+
+	if clip, _ := io.ReadAll(audio.Body); string(clip) != "pcm fa" {
 		t.Errorf("the voice was not told the language: %s", clip)
 	}
 

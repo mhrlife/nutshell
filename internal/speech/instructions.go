@@ -2,28 +2,35 @@ package speech
 
 import "github.com/mhrlife/nutshell/internal/lang"
 
-// LectureStyle is the built-in delivery instruction placed before the spoken
-// text. Only a voice that takes natural-language directions ahead of the
-// transcript and speaks what follows "Transcript:" can use it, such as
+// DryStyle is the built-in director's note put before the spoken text: a
+// colleague reading something out, not a narrator performing it. Only a model
+// that takes directions ahead of the transcript can be sent one, such as
 // google/gemini-3.1-flash-tts-preview; x-ai/grok-voice-tts-1.0 reads every
-// word of it aloud, which is why --tts-prompt defaults to none.
-const LectureStyle = `[Professional, Fast Pace] `
+// word of a note aloud, which is what --tts-prompt=none is for.
+const DryStyle = `Style: Flat affect, minimal pitch variation, dry delivery. Pace: Slightly fast conversational pace. Accent: Neutral.`
 
-// SpeakInstructions returns everything put before the text to speak: how to
-// deliver it, which language it is in and how that language sounds, then the
-// header the model expects ahead of the transcript. An empty style is the
-// user asking for no directions at all (--tts-prompt=none), and the text goes
-// out bare.
+// speechBrief is the shape google/gemini-3.1-flash-tts-preview reads: the job,
+// then the note on how to deliver it, and last the transcript, which is
+// everything after the final header.
+const speechBrief = "Read the following transcript based on the audio profile and director's note.\n" +
+	"\n\n# Director's note\n"
+
+// SpeakInstructions returns everything put before the text to speak: what the
+// model is doing, the note on how to deliver it, which language the text is in
+// and how that language sounds, then the header the transcript follows. An
+// empty style is the user asking for no directions at all
+// (--tts-prompt=none), and the text goes out bare.
 func SpeakInstructions(style string, l lang.Language) string {
 	if style == "" {
 		return ""
 	}
 
+	note := style
 	if l.TTSNote != "" {
-		style += "\nLanguage: " + l.TTSNote + "\n"
+		note += "\nLanguage: " + l.TTSNote
 	}
 
-	return style + "\nTranscript:\n"
+	return speechBrief + note + "\n\n## Transcript:\n"
 }
 
 // transcribeTask instructs the speech-to-text model. The code-switching
@@ -61,19 +68,19 @@ func TranscribeInstructions(l lang.Language) string {
 
 // Delivery styles selectable from the command line.
 const (
-	StyleLecture = "lecture"
-	StyleNone    = "none"
+	StyleDry  = "dry"
+	StyleNone = "none"
 )
 
-// ResolveStyle maps a --tts-prompt value to the delivery instructions put
-// before the transcript: a preset name, or literal text used as-is.
+// ResolveStyle maps a --tts-prompt value to the director's note put before
+// the transcript: a preset name, or literal text used as-is.
 func ResolveStyle(value string) string {
 	switch value {
-	case StyleLecture:
-		return LectureStyle
+	case StyleDry:
+		return DryStyle
 	case StyleNone, "":
 		return ""
 	default:
-		return value + "\n"
+		return value
 	}
 }

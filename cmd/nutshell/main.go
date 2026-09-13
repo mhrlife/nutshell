@@ -8,7 +8,6 @@ import (
 	"flag"
 	"fmt"
 	"log/slog"
-	"net"
 	"net/http"
 	"os"
 	"os/exec"
@@ -109,11 +108,9 @@ func run(logger *slog.Logger, level *slog.LevelVar) error {
 	cfg := server.Config{Lang: opts.Lang, Project: filepath.Base(cwd)}
 	handler := server.New(ag, sp, store, http.FS(web.FS()), cfg, logger)
 
-	var lc net.ListenConfig
-
-	ln, err := lc.Listen(ctx, "tcp", fmt.Sprintf("127.0.0.1:%d", opts.Port))
+	ln, err := listen(ctx, logger, opts.Port)
 	if err != nil {
-		return fmt.Errorf("listening: %w", err)
+		return err
 	}
 
 	url := "http://" + ln.Addr().String()

@@ -6,16 +6,21 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/mhrlife/nutshell/internal/agent"
 	"github.com/mhrlife/nutshell/internal/lang"
+	"github.com/mhrlife/nutshell/internal/speech"
 )
 
 const (
 	maxAudioRequest    = 32 << 20
 	maxTextRequest     = 1 << 20
 	maxSettingsRequest = 64 << 10
+	// audioChunk is how much spoken audio is passed on at a time, a fifth of
+	// a second of it: small enough that the first words leave without a wait.
+	audioChunk = speech.PCMSampleRate / 5 * 2
 )
 
 func (s *Server) handleConfig(w http.ResponseWriter, _ *http.Request) {
@@ -79,10 +84,50 @@ func (s *Server) handleSpeak(w http.ResponseWriter, r *http.Request) {
 
 		return
 	}
+	defer clip.Audio.Close()
 
-	w.Header().Set("Content-Type", "audio/wav")
+	// Raw samples, passed on as they arrive. The browser asks for a passage a
+	// piece at a time and lays the pieces end to end, because the voice says
+	// nothing until it has generated nearly everything — see static/pcm.js.
+	w.Header().Set("Content-Type", "audio/pcm")
+	w.Header().Set("X-Sample-Rate", strconv.Itoa(speech.PCMSampleRate))
 	w.Header().Set("X-Generation-Id", clip.GenerationID)
-	_, _ = w.Write(clip.Audio)
+	s.streamAudio(w, r, clip.Audio)
+}
+
+// streamAudio copies a clip to the browser chunk by chunk, flushing each one:
+// holding audio back to send it in one piece is exactly what streaming is
+// there to avoid. The reply has already gone out with its status, so a
+// failure part way through can only be logged, and the browser hears a clip
+// that stops early.
+func (s *Server) streamAudio(w http.ResponseWriter, r *http.Request, audio io.Reader) {
+	out := http.NewResponseController(w)
+	buf := make([]byte, audioChunk)
+
+	for {
+		n, err := audio.Read(buf)
+		if n > 0 {
+			if _, werr := w.Write(buf[:n]); werr != nil {
+				s.logger.WarnContext(r.Context(), "speech stream cut off", "error", werr)
+
+				return
+			}
+
+			if ferr := out.Flush(); ferr != nil {
+				s.logger.WarnContext(r.Context(), "speech stream cannot be flushed", "error", ferr)
+
+				return
+			}
+		}
+
+		if err != nil {
+			if !errors.Is(err, io.EOF) {
+				s.logger.WarnContext(r.Context(), "speech stream broke off", "error", err)
+			}
+
+			return
+		}
+	}
 }
 
 // handleSummarize shortens a passage selected in a full answer, so the

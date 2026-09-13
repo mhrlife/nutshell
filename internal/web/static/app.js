@@ -279,13 +279,7 @@ async function speak(turn) {
     turn.loadingAudio = true;
     renderMeta(turn);
     try {
-      const resp = await fetch('/api/speak', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: plainText(turn.answer.summary), lang: settings.lang }),
-      });
-      if (!resp.ok) throw await httpError(resp);
-      turn.audio = URL.createObjectURL(await resp.blob());
-      priceClip(turn, resp.headers.get('X-Generation-Id'));
+      turn.audio = await speakClip(plainText(turn.answer.summary), (id) => priceClip(turn, id));
     } catch (err) {
       const detail = errText(err);
       logIssue('error', 'speak', detail);
@@ -298,20 +292,23 @@ async function speak(turn) {
   play(turn.audio, turn);
 }
 
-// play starts audio for a turn's summary, or for a passage's clip when clip
-// is given. Both keep their audio for replays.
-function play(url, turn, clip) {
-  const audio = new Audio(url);
+// play starts the voice of a turn's summary, or of a passage's clip when clip
+// is given. Both keep their audio for replays, which start from the top; the
+// clip may still be arriving, and plays as it does (see pcm.js).
+function play(audio, turn, clip) {
   player = { audio, turn, clip };
   const refresh = () => { if (turn) renderMeta(turn); if (clip) renderClip(clip); renderState(); };
   audio.onplay = refresh;
   audio.onpause = refresh;
   audio.onended = () => { if (player && player.audio === audio) player = null; refresh(); };
+  audio.currentTime = 0;
   audio.play();
   refresh();
 }
 
-// priceClip fetches the clip's cost once OpenRouter has priced it (a few seconds later).
+// priceClip fetches what one piece of a clip cost, once OpenRouter has priced
+// it (a few seconds later). A clip is read in pieces, so this is called once
+// for each of them and the turn's total adds them up.
 async function priceClip(turn, id) {
   if (!id) return;
   try {
