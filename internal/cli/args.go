@@ -23,8 +23,7 @@ type Options struct {
 	SummaryModel string
 	TTSModel     string
 	TTSVoice     string
-	TTSStyle     string // --tts-prompt: delivery instructions for the voice
-	TTSSpeed     float64
+	TTSStyle     string   // --tts-prompt: delivery instructions for the voice
 	AgentArgs    []string // everything forwarded to the agent
 }
 
@@ -33,7 +32,7 @@ type Options struct {
 var ownFlags = map[string]bool{
 	"port": false, "no-open": true, "lang": false, "agent": false, "agent-bin": false,
 	"openrouter-key": false, "stt-model": false, "summary-model": false, "tts-model": false, "tts-voice": false,
-	"tts-prompt": false, "tts-speed": false, "version": true, "debug": true, "help": true, "h": true,
+	"tts-prompt": false, "version": true, "debug": true, "help": true, "h": true,
 }
 
 // Parse splits args into nutshell options and agent arguments. getenv
@@ -57,8 +56,7 @@ func Parse(args []string, getenv func(string) string, out io.Writer) (Options, e
 	fs.StringVar(&o.SummaryModel, "summary-model", "google/gemini-3.8-flash", "OpenRouter model that summarizes a selected passage before it is spoken")
 	fs.StringVar(&o.TTSModel, "tts-model", "google/gemini-3.1-flash-tts-preview", "OpenRouter text-to-speech model that speaks answers")
 	fs.StringVar(&o.TTSVoice, "tts-voice", "Charon", "voice for the speech model (google/gemini-3.1-flash-tts-preview: Charon, Zephyr, Puck, Kore, Fenrir, Leda, Orus, Aoede)")
-	fs.Float64Var(&o.TTSSpeed, "tts-speed", 0, "how fast the voice talks, 1 being the model's own pace, 0 leaving it unsaid (only x-ai/grok-voice-tts-1.0 obeys it, from 0.7 to 1.5; Gemini TTS takes its pace from --tts-prompt)")
-	fs.StringVar(&o.TTSStyle, "tts-prompt", "dry", "director's note placed before the spoken text, for voices that follow one (Gemini TTS does, Grok reads it aloud): \"dry\" (built-in flat, fast delivery), \"none\" (send the text bare, without even the language note), or literal text")
+	fs.StringVar(&o.TTSStyle, "tts-prompt", "dry", "director's note placed before the spoken text, for voices that follow one (Gemini TTS does): \"dry\" (built-in flat, fast delivery), \"none\" (send the text bare, without even the language note), or literal text")
 	fs.Usage = func() {
 		fmt.Fprintln(out, "usage: nutshell [nutshell flags] [agent flags...]")
 		fmt.Fprintln(out)

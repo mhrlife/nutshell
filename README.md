@@ -115,8 +115,7 @@ nutshell's own flags:
 | `--summary-model` | `google/gemini-3.8-flash` | Summarizes a selected passage before it is read aloud |
 | `--tts-model` | `google/gemini-3.1-flash-tts-preview` | Text-to-speech model |
 | `--tts-voice` | `Charon` | Voice for the speech model (Gemini TTS: `Charon`, `Zephyr`, `Puck`, `Kore`, `Fenrir`, `Leda`, `Orus`, `Aoede`) |
-| `--tts-speed` | `0` (unsaid) | How fast the voice talks; `1` is the model's own pace. Only Grok obeys it (`0.7`–`1.5`); Gemini TTS takes its pace from `--tts-prompt` |
-| `--tts-prompt` | `dry` | Director's note placed before the spoken text, for voices that follow one (Gemini TTS does; Grok reads it aloud): the built-in flat, fast `dry` style, `none`, or literal text |
+| `--tts-prompt` | `dry` | Director's note placed before the spoken text, for voices that follow one (Gemini TTS does): the built-in flat, fast `dry` style, `none`, or literal text |
 | `--debug` | | Log every API call, turn and OpenRouter request (`--verbose` stays the agent's own flag) |
 
 ## Side threads

@@ -5,8 +5,8 @@ import "github.com/mhrlife/nutshell/internal/lang"
 // DryStyle is the built-in director's note put before the spoken text: a
 // colleague reading something out, not a narrator performing it. Only a model
 // that takes directions ahead of the transcript can be sent one, such as
-// google/gemini-3.1-flash-tts-preview; x-ai/grok-voice-tts-1.0 reads every
-// word of a note aloud, which is what --tts-prompt=none is for.
+// google/gemini-3.1-flash-tts-preview; a voice that reads every word of a note
+// aloud is what --tts-prompt=none is for.
 const DryStyle = `Style: Flat affect, minimal pitch variation, dry delivery. Pace: Slightly fast conversational pace. Accent: Neutral.`
 
 // speechBrief is the shape google/gemini-3.1-flash-tts-preview reads: the job,

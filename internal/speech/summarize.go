@@ -9,38 +9,30 @@ import (
 
 // Summary is the result of Summarize.
 type Summary struct {
-	Text    string // what the screen shows
-	Speech  string // what the voice reads: Text plus any speech tags
+	Text    string
 	CostUSD float64
 }
 
 // Summarize shortens a passage the user selected in a full answer to the few
 // sentences worth hearing, written in l the way it is spoken. It goes to a
 // fast chat model rather than the coding agent: the agent would add a turn to
-// the conversation for something the user only wanted to hear. When the voice
-// performs speech tags, the summary is written with them.
+// the conversation for something the user only wanted to hear.
 func (c *Client) Summarize(ctx context.Context, passage string, l lang.Language) (Summary, error) {
-	instructions := SummarizeInstructions(l)
-	if speaksTags(c.cfg.TTSModel) {
-		instructions += "\n\n" + tagInstructions()
-	}
-
 	messages := []any{
-		map[string]string{"role": "system", "content": instructions},
+		map[string]string{"role": "system", "content": SummarizeInstructions(l)},
 		map[string]string{"role": "user", "content": "<passage>\n" + passage + "\n</passage>"},
 	}
 
-	speech, cost, err := c.chat(ctx, c.cfg.SummaryModel, messages)
+	text, cost, err := c.chat(ctx, c.cfg.SummaryModel, messages)
 	if err != nil {
 		return Summary{}, err
 	}
 
-	text := stripSpeechTags(speech)
 	if text == "" {
 		return Summary{}, errors.New("openrouter returned an empty summary")
 	}
 
-	return Summary{Text: text, Speech: speech, CostUSD: cost}, nil
+	return Summary{Text: text, CostUSD: cost}, nil
 }
 
 // summarizeTask instructs the model that summarizes a selected passage.

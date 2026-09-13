@@ -22,10 +22,9 @@ async function speakPassage(turn, passage, summarize) {
       const out = await resp.json();
       addCost(turn, 'summary', out.cost_usd);
       clip.text = plainText(out.text);
-      clip.speech = spokenText(out.speech || out.text);
       setClipStatus(clip, 'voicing');
     }
-    clip.audio = await speakClip(summarize ? clip.speech : plainText(passage), (id) => priceClip(turn, id));
+    clip.audio = await speakClip(summarize ? clip.text : spokenLines(passage), (id) => priceClip(turn, id));
     setClipStatus(clip, 'ready');
     // never talk over the mic, or over something started while this loaded
     if (!player && state !== 'listening' && state !== 'transcribing') play(clip.audio, null, clip);
@@ -38,10 +37,10 @@ async function speakPassage(turn, passage, summarize) {
   }
 }
 
-// spokenText is plainText for the voice: it keeps the [pause] and <slow>…</slow>
-// speech tags a summary is written with, which plainText would break.
-function spokenText(s) {
-  return (s || '').replace(/```[\s\S]*?```/g, ' ').replace(/[`*_~#]/g, '').replace(/\s+/g, ' ').trim();
+// spokenLines is plainText for the voice: it keeps the passage's line breaks,
+// which end a sentence where the passage had one ending without a full stop.
+function spokenLines(s) {
+  return (s || '').split('\n').map(plainText).filter(Boolean).join('\n');
 }
 
 async function postJSON(path, body) {
@@ -54,7 +53,7 @@ async function postJSON(path, body) {
 
 function addClip(turn, passage, kind) {
   const node = document.getElementById('clip-template').content.firstElementChild.cloneNode(true);
-  const clip = { turn, kind, passage, text: '', speech: '', audio: null, error: '', status: kind === 'summary' ? 'summarizing' : 'voicing', node };
+  const clip = { turn, kind, passage, text: '', audio: null, error: '', status: kind === 'summary' ? 'summarizing' : 'voicing', node };
   const quoted = node.querySelector('.clip-quote');
   quoted.textContent = oneLine(passage);
   quoted.dir = isRTL(passage) ? 'rtl' : 'ltr';

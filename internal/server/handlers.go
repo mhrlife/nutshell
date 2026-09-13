@@ -157,9 +157,7 @@ func (s *Server) handleSummarize(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// text is shown, speech is what goes back to /api/speak: the same words
-	// with the speech tags the voice performs.
-	writeJSON(w, http.StatusOK, map[string]any{"text": sum.Text, "speech": sum.Speech, "cost_usd": sum.CostUSD})
+	writeJSON(w, http.StatusOK, map[string]any{"text": sum.Text, "cost_usd": sum.CostUSD})
 }
 
 // handleCost prices a speech generation once OpenRouter has the record.
