@@ -1,12 +1,18 @@
 // The full answer read aloud, with the controls of any audio player: play and
 // pause, ten seconds back or forward, a timeline to click or drag, and the
-// playback speed. Most answers are voiced in one speech request; only one too
-// long for it is split into segments (see speakable.js), and only the next few
-// of those are voiced ahead of the one playing. The timeline covers
-// the whole answer from the start; how long the part not voiced yet will run
-// is estimated from the part that is. What is read comes from speakable.js.
+// playback speed. Most answers are one segment; only one long enough to be
+// worth holding in parts is split (see speakable.js), and the segment after
+// the one playing is voiced alongside it. A segment is a clip that starts
+// playing as soon as its first piece arrives and grows as the rest are read
+// (see pcm.js), so the timeline covers the whole answer from the start and
+// how long a segment not finished yet will run is estimated from the
+// segments that are. What is read comes from speakable.js.
 
-const NARRATION_AHEAD = 2; // segments voiced beyond the one playing
+// A segment is voiced piece by piece (pcm.js), so the one playing keeps
+// itself supplied; a segment ahead of it is voiced only so the seam between
+// two segments is not a wait, and voicing further ahead than that would pay
+// for audio nobody may ever hear.
+const NARRATION_AHEAD = 1;
 const NARRATION_SKIP = 10; // seconds the back and forward buttons move
 const NARRATION_RATES = [1, 1.25, 1.5, 2, 0.75];
 const SECONDS_PER_CHAR = 0.07; // the guess until a segment has been voiced
@@ -21,24 +27,30 @@ let narrationFrame = 0;
 
 // ---- the timeline ----------------------------------------------------------
 
-// narrationSpans places every segment on the timeline, in seconds: voiced
-// segments at their real length, the rest at the pace heard so far.
+// narrationSpans places every segment on the timeline, in seconds: segments
+// spoken to the end at their real length, the rest at the pace heard so far,
+// but never shorter than the audio already in hand.
 function narrationSpans(n) {
   let secs = 0;
   let chars = 0;
-  for (const seg of n.segments) if (seg.status === 'ready') { secs += seg.duration; chars += seg.chars; }
+  for (const seg of n.segments) if (spoken(seg)) { secs += seg.voice.duration; chars += seg.chars; }
   const pace = chars ? secs / chars : SECONDS_PER_CHAR;
   let at = 0;
   return n.segments.map((seg) => {
-    const span = { start: at, len: seg.status === 'ready' ? seg.duration : seg.chars * pace, ready: seg.status === 'ready' };
+    const here = seg.voice ? seg.voice.duration : 0;
+    const span = { start: at, len: spoken(seg) ? here : Math.max(seg.chars * pace, here), ready: spoken(seg) };
     at += span.len;
     return span;
   });
 }
 
+// spoken reports whether a segment has been voiced all the way through, so
+// its length on the timeline is a fact rather than an estimate.
+const spoken = (seg) => !!seg.voice && seg.voice.complete;
+
 function narrationPosition(n, spans) {
   const span = spans[n.index];
-  const offset = n.audio && n.audio.readyState > 0 ? n.audio.currentTime : n.at * span.len;
+  const offset = n.audio ? n.audio.currentTime : n.at * span.len;
   return span.start + Math.min(offset, span.len);
 }
 
@@ -94,14 +106,11 @@ function pauseNarration(n) {
 function resumeNarration(n) {
   const seg = n.segments[n.index];
   if (!n.audio && seg.status === 'ready') {
-    const audio = new Audio(seg.url);
-    audio.defaultPlaybackRate = narrationRate;
+    const audio = seg.voice;
     audio.playbackRate = narrationRate;
-    audio.currentTime = n.at * seg.duration;
+    audio.currentTime = n.at * audio.duration;
     audio.onended = () => advanceNarration(n);
-    // paused or started from outside the page, e.g. by a media key
-    audio.onpause = () => { if (!audio.ended && n.playing) pauseNarration(n); };
-    audio.onplay = () => { if (!n.playing) playNarration(n); };
+    audio.onprogress = () => renderNarration(n); // the timeline grows with the clip
     n.audio = audio;
   }
   if (n.playing && n.audio && n.audio.paused) {
@@ -116,11 +125,9 @@ function resumeNarration(n) {
 function unmountNarration(n) {
   const audio = n.audio;
   if (!audio) return;
-  const seg = n.segments[n.index];
-  if (audio.readyState > 0 && seg.duration) n.at = Math.min(1, audio.currentTime / seg.duration);
+  if (audio.duration) n.at = Math.min(1, audio.currentTime / audio.duration);
   audio.onended = null;
-  audio.onpause = null;
-  audio.onplay = null;
+  audio.onprogress = null;
   audio.pause();
   n.audio = null;
 }
@@ -154,12 +161,8 @@ function prepareNarration(n) {
 async function voiceSegment(n, seg) {
   seg.status = 'loading';
   try {
-    const resp = await postJSON('/api/speak', { text: seg.text, lang: settings.lang });
-    const blob = await resp.blob();
-    seg.duration = await wavSeconds(blob);
-    seg.url = URL.createObjectURL(blob);
-    seg.status = 'ready';
-    priceClip(n.turn, resp.headers.get('X-Generation-Id'));
+    seg.voice = await speakClip(seg.text, (id) => priceClip(n.turn, id));
+    seg.status = 'ready'; // the first piece is on its way; the rest follows it in
   } catch (err) {
     seg.status = 'failed';
     const current = n.segments[n.index] === seg;
@@ -168,15 +171,6 @@ async function voiceSegment(n, seg) {
   if (n.segments[n.index] === seg) resumeNarration(n);
   renderNarration(n);
   renderState();
-}
-
-// wavSeconds reads a clip's length from its WAV header, so the timeline knows
-// it before the clip is ever loaded into a player.
-async function wavSeconds(blob) {
-  const head = new DataView(await blob.slice(0, 44).arrayBuffer());
-  const byteRate = head.byteLength === 44 ? head.getUint32(28, true) : 0;
-  if (!byteRate) throw new Error('the speech server did not return a WAV clip');
-  return (blob.size - 44) / byteRate;
 }
 
 // ---- the player ------------------------------------------------------------
@@ -247,7 +241,7 @@ function renderNarrator() {
   const spans = narrationSpans(n);
   const total = spansEnd(spans);
   const pos = dragAt === null ? narrationPosition(n, spans) : dragAt * total;
-  const waiting = n.playing && !n.audio;
+  const waiting = n.playing && (!n.audio || n.audio.waiting); // nothing voiced yet, or the stream fell behind
   const pct = (v) => `${total ? Math.min(100, (v / total) * 100) : 0}%`;
 
   const toggle = narrator.querySelector('.np-toggle');
@@ -323,7 +317,7 @@ narrator.addEventListener('click', (e) => {
     narrationRate = NARRATION_RATES[(NARRATION_RATES.indexOf(narrationRate) + 1) % NARRATION_RATES.length];
     for (const turn of turns) {
       const audio = turn.narration && turn.narration.audio;
-      if (audio) { audio.defaultPlaybackRate = narrationRate; audio.playbackRate = narrationRate; }
+      if (audio) audio.playbackRate = narrationRate;
     }
     renderNarrator();
   }

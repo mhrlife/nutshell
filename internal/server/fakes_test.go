@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -111,7 +112,7 @@ func (f fakeSpeech) Transcribe(_ context.Context, audio, _ string, l lang.Langua
 }
 
 func (f fakeSpeech) Speak(_ context.Context, _ string, l lang.Language) (speech.Clip, error) {
-	return speech.Clip{Audio: []byte("RIFF " + l.Code), GenerationID: "gen-1"}, nil
+	return speech.Clip{Audio: io.NopCloser(strings.NewReader("pcm " + l.Code)), GenerationID: "gen-1"}, nil
 }
 
 func (f fakeSpeech) Summarize(_ context.Context, passage string, l lang.Language) (speech.Summary, error) {

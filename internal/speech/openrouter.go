@@ -25,6 +25,15 @@ const (
 	requestTimeout = 3 * time.Minute
 	maxErrorBody   = 4 << 10
 	maxAudioBody   = 64 << 20
+
+	// PCMSampleRate is the samples per second in the audio OpenRouter's pcm
+	// format carries: little-endian 16-bit samples, 24 kHz mono. Raw samples
+	// are what let the browser put one clip straight after another and play
+	// them as they land: there is no container to open, and no frame that has
+	// to be whole before it means anything.
+	PCMSampleRate = 24000
+	// firstSample is one 16-bit sample: the proof that audio is on its way.
+	firstSample = 2
 )
 
 // ErrDisabled is returned when no API key was configured.
@@ -36,10 +45,11 @@ type Transcript struct {
 	CostUSD float64
 }
 
-// Clip is the result of Speak.
+// Clip is the result of Speak: the audio of one spoken passage, still being
+// spoken while it is read. The caller reads it to the end and closes it.
 type Clip struct {
-	Audio        []byte // WAV
-	GenerationID string // pass to GenerationCost once OpenRouter has priced the clip
+	Audio        io.ReadCloser // raw PCM at PCMSampleRate, in the order it is spoken
+	GenerationID string        // pass to GenerationCost once OpenRouter has priced the clip
 }
 
 // Config selects the models used for each direction.
@@ -169,16 +179,19 @@ func (c *Client) chatOnce(ctx context.Context, model string, messages []any) (st
 	return strings.TrimSpace(out.Choices[0].Message.Content), out.Usage.Cost, nil
 }
 
-// Speak converts text to a WAV clip, trying again after a transient failure.
-// l is the language the text is written in, so the voice reads it the way
-// that language is spoken rather than sounding out foreign words.
+// Speak sets the voice reading text and returns the clip while it is still
+// being spoken, trying again after a transient failure. l is the language the
+// text is written in, so the voice reads it the way that language is spoken
+// rather than sounding out foreign words. The caller closes the clip.
 func (c *Client) Speak(ctx context.Context, text string, l lang.Language) (Clip, error) {
+	body := c.speechRequest(c.speechInput(text, l))
+
 	var clip Clip
 
 	err := c.retry(ctx, c.cfg.TTSModel, func() error {
 		var err error
 
-		clip, err = c.speakOnce(ctx, c.speechRequest(c.speechInput(text, l)))
+		clip, err = c.speakOnce(ctx, body)
 
 		return err
 	})
@@ -186,29 +199,39 @@ func (c *Client) Speak(ctx context.Context, text string, l lang.Language) (Clip,
 	return clip, err
 }
 
-// speakOnce is a single attempt at Speak.
+// speakOnce is a single attempt at Speak. It waits for the first sample
+// before handing the clip on: a provider that accepts the request and then
+// says nothing is worth another try, and once the caller is reading the audio
+// there is no way back to try anything.
 func (c *Client) speakOnce(ctx context.Context, body map[string]any) (Clip, error) {
 	resp, err := c.post(ctx, c.baseURL+speechPath, body)
 	if err != nil {
 		return Clip{}, err
 	}
-	defer resp.Body.Close()
 
-	pcm, err := io.ReadAll(io.LimitReader(resp.Body, maxAudioBody))
-	if err != nil {
-		return Clip{}, fmt.Errorf("reading audio: %w", err)
-	}
+	first := make([]byte, firstSample)
+	if _, err := io.ReadFull(resp.Body, first); err != nil {
+		_ = resp.Body.Close()
 
-	if len(pcm) == 0 {
-		return Clip{}, errors.New("openrouter returned no audio")
+		return Clip{}, fmt.Errorf("openrouter returned no audio: %w", err)
 	}
 
 	// The audio body carries no usage data; the generation record priced a
 	// few seconds later does, see GenerationCost.
 	return Clip{
-		Audio:        wavFromPCM16(pcm, pcmSampleRate, pcmChannels),
+		Audio: cappedBody{
+			Reader: io.MultiReader(bytes.NewReader(first), io.LimitReader(resp.Body, maxAudioBody)),
+			Closer: resp.Body,
+		},
 		GenerationID: resp.Header.Get("X-Generation-Id"),
 	}, nil
+}
+
+// cappedBody is a response body that stops reading at maxAudioBody, so a
+// stream that never ends cannot fill memory.
+type cappedBody struct {
+	io.Reader
+	io.Closer
 }
 
 // speechInput is what the voice is handed to say text in l: the delivery

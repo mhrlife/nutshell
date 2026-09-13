@@ -5,9 +5,10 @@
 // on a short bold phrase. /api/speak strips the tags for a voice that would
 // read them out.
 
-// Characters in a segment. Every segment is its own speech request, and the
-// voice starts afresh at each one, so a seam between them is audible: most
-// answers fit one segment, and only a longer one is split.
+// Characters in a segment. A segment is one clip of the player's timeline,
+// voiced and kept in memory as a whole (pcm.js cuts it into the pieces that
+// are actually asked for), so the size only bounds how much audio is held at
+// once: most answers are one segment, and only a long one is split.
 const NARRATION_SEGMENT = 10000;
 const EMPHASIS_WORDS = 5; // bold text longer than this is read plainly
 
@@ -88,18 +89,23 @@ function narrationSegments(blocks) {
     current = current ? `${current} ${piece}` : piece;
   };
   for (const block of blocks) {
-    const sentences = block.length > NARRATION_SEGMENT ? block.split(/(?<=[.!?؟…])\s+/) : [block];
-    sentences.flatMap((s) => (s.length > NARRATION_SEGMENT ? byWords(s) : [s])).forEach(add);
+    const parts = block.length > NARRATION_SEGMENT ? sentences(block) : [block];
+    parts.flatMap((s) => (s.length > NARRATION_SEGMENT ? byWords(s, NARRATION_SEGMENT) : [s])).forEach(add);
   }
   if (current) texts.push(current);
-  return balanceEmphasis(texts).map((text) => ({ text, chars: untagged(text).length, status: 'idle', url: null, duration: 0 }));
+  return balanceEmphasis(texts).map((text) => ({ text, chars: untagged(text).length, status: 'idle', voice: null }));
 }
 
-function byWords(sentence) {
+// sentences cuts text where one sentence ends and the next starts.
+const sentences = (text) => text.split(/(?<=[.!?؟…])\s+/);
+
+// byWords breaks a sentence with nowhere better to break it into runs of at
+// most limit characters.
+function byWords(sentence, limit) {
   const out = [];
   let cur = '';
   for (const word of sentence.split(' ')) {
-    if (cur && cur.length + 1 + word.length > NARRATION_SEGMENT) { out.push(cur); cur = ''; }
+    if (cur && cur.length + 1 + word.length > limit) { out.push(cur); cur = ''; }
     cur = cur ? `${cur} ${word}` : word;
   }
   if (cur) out.push(cur);
@@ -107,7 +113,7 @@ function byWords(sentence) {
 }
 
 // balanceEmphasis closes an emphasis that a split left open at the end of one
-// segment and opens it again at the start of the next: every segment is its
+// piece of text and opens it again at the start of the next: each piece is its
 // own speech request, and a tag left open would be read out.
 function balanceEmphasis(texts) {
   let open = false;
