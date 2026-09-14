@@ -2,20 +2,20 @@
 // pause, ten seconds back or forward, a timeline to click or drag, and the
 // playback speed. Most answers are one segment; only one long enough to be
 // worth holding in parts is split (see speakable.js), and the segment after
-// the one playing is voiced alongside it. A segment is a clip that starts
+// the one playing is voiced as that one nears its end. A segment is a clip that starts
 // playing as soon as its first piece arrives and grows as the rest are read
 // (see pcm.js), so the timeline covers the whole answer from the start and
 // how long a segment not finished yet will run is estimated from the
 // segments that are. What is read comes from speakable.js.
 
-// A segment is voiced piece by piece (pcm.js), so the one playing keeps
-// itself supplied; a segment ahead of it is voiced only so the seam between
-// two segments is not a wait, and voicing further ahead than that would pay
+// A segment is voiced piece by piece as it is heard (feed.js), so the one
+// playing keeps itself supplied; the segment after it is voiced only once the
+// one playing is voiced to its end and this close to being heard to it, so
+// the seam between two segments is not a wait. Voicing it any sooner would pay
 // for audio nobody may ever hear.
-const NARRATION_AHEAD = 1;
+const NARRATION_LEAD = 30; // seconds
 const NARRATION_SKIP = 10; // seconds the back and forward buttons move
 const NARRATION_RATES = [1, 1.25, 1.5, 2, 0.75];
-const SECONDS_PER_CHAR = 0.07; // the guess until a segment has been voiced
 
 const narrator = document.getElementById('narrator');
 const listenBtn = document.getElementById('listen');
@@ -34,7 +34,7 @@ function narrationSpans(n) {
   let secs = 0;
   let chars = 0;
   for (const seg of n.segments) if (spoken(seg)) { secs += seg.voice.duration; chars += seg.chars; }
-  const pace = chars ? secs / chars : SECONDS_PER_CHAR;
+  const pace = chars ? secs / chars : SPEECH_PER_CHAR;
   let at = 0;
   return n.segments.map((seg) => {
     const here = seg.voice ? seg.voice.duration : 0;
@@ -147,15 +147,18 @@ function advanceNarration(n) {
   renderState();
 }
 
-// prepareNarration voices the current segment, and the few after it while the
-// narration plays. A segment that failed gets another go once it is current.
+// prepareNarration voices the current segment, and the next one once the
+// current one is voiced to its end and within NARRATION_LEAD of being heard to
+// it. A segment that failed gets another go once it is current.
 function prepareNarration(n) {
-  const last = n.playing ? Math.min(n.segments.length - 1, n.index + NARRATION_AHEAD) : n.index;
-  for (let i = n.index; i <= last; i++) {
-    const seg = n.segments[i];
-    if (seg.status === 'failed' && i === n.index && n.playing) seg.status = 'idle';
-    if (seg.status === 'idle') voiceSegment(n, seg);
-  }
+  const seg = n.segments[n.index];
+  if (seg.status === 'failed' && n.playing) seg.status = 'idle';
+  if (seg.status === 'idle') voiceSegment(n, seg);
+
+  const next = n.segments[n.index + 1];
+  const audio = n.audio;
+  if (!n.playing || !next || next.status !== 'idle' || !audio || !audio.complete) return;
+  if ((audio.duration - audio.currentTime) / audio.playbackRate < NARRATION_LEAD) voiceSegment(n, next);
 }
 
 async function voiceSegment(n, seg) {
@@ -294,6 +297,7 @@ function tickNarration() {
   const step = () => {
     const n = player && player.narration;
     if (!n) { narrationFrame = 0; return; }
+    prepareNarration(n); // the next segment is voiced as this one nears its end
     renderNarration(n);
     narrationFrame = requestAnimationFrame(step);
   };

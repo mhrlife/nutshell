@@ -5,8 +5,8 @@
 // four hundredths of a second a character, and streaming the reply does not
 // change that. A seven-hundred-character answer asked for in one piece is
 // twenty seconds of silence; with a short first piece, the first words arrive
-// in a few seconds, and the pieces behind it — asked for at the same time, and
-// two more always on the way after that — arrive while it is being heard.
+// in a few seconds, and the pieces behind it arrive while it is being heard,
+// each asked for only when it is about to be needed (see feed.js).
 // So a Voice takes the pieces in the order they are spoken and lays them end
 // to end on the Web Audio clock, and what the players in app.js, clips.js and
 // narrator.js hold is one clip that grows while it plays — play, pause,
@@ -29,13 +29,14 @@ const PCM_FULL_SCALE = 0x8000; // a 16-bit sample at full deflection
 // voiced before the pieces ahead of it have been heard: a voice takes about
 // half as long to generate a character as to say it, so a piece may hold as
 // much as all the pieces before it together plus one first piece, which holds
-// even at double speed — 100, 200, 400, 800 characters, and no more than
-// SPEECH_LONGEST. A last piece shorter than SPEECH_TAIL goes with the one
-// before it.
+// even at double speed — 100, 200, 400 characters, and no more than
+// SPEECH_LONGEST. The cap is low because a piece is voiced, and paid for, in
+// full once asked for: a clip stopped part way has voiced at most one piece
+// nobody hears. A last piece shorter than SPEECH_TAIL goes with the one before
+// it.
 const SPEECH_FIRST = { min: 30, max: 100 };
-const SPEECH_LONGEST = 800;
+const SPEECH_LONGEST = 400;
 const SPEECH_TAIL = 70;
-const SPEECH_AHEAD = 2; // pieces asked for beyond the one being poured in
 
 let voiceCtx = null;
 
@@ -65,6 +66,8 @@ class Voice {
     this.anchorTime = 0; // on the audio clock
     this.sources = new Set(); // scheduled, not yet played out
     this.speed = 1;
+    this.held = false; // paused by the listener: nothing more is asked for
+    this.feed = null; // what asks for the pieces still to come (feed.js)
 
     this.onplay = null;
     this.onpause = null;
@@ -91,6 +94,7 @@ class Voice {
     if (i < bytes.length) this.spare = bytes[i];
     this.received = out;
     this.pump();
+    this.nudge();
     if (this.onprogress) this.onprogress();
   }
 
@@ -132,13 +136,17 @@ class Voice {
     if (this.playing) return;
     if (this.complete && this.at >= this.received) this.at = 0; // it had finished: from the top
     this.playing = true;
+    this.held = false;
     this.sent = this.at;
     this.anchor(this.at);
     this.pump();
+    this.nudge();
     if (this.onplay) this.onplay();
   }
 
   pause() {
+    this.held = true;
+    this.nudge(); // stops it asking for more
     if (!this.playing) return;
     this.at = Math.round(this.currentTime * this.rate);
     this.playing = false;
@@ -169,6 +177,13 @@ class Voice {
     this.at = to;
     this.sent = to;
     if (this.playing) { this.anchor(to); this.pump(); }
+    this.nudge();
+  }
+
+  // nudge has the feed look again at what is needed: the playhead, the speed
+  // or what is in hand changed.
+  nudge() {
+    if (this.feed) this.feed.check();
   }
 
   get playbackRate() { return this.speed; }
@@ -303,76 +318,4 @@ function cutWithin(sentence, { min, max }) {
   if (clause >= min) return clause;
   const space = reach.lastIndexOf(' ');
   return space > 0 ? space : max;
-}
-
-// speakClip has text read aloud and comes back with the clip as soon as its
-// first piece is on its way, the rest following it in. The pieces right behind
-// the first are asked for with it, so they are voiced while it is. onGeneration
-// is told what each piece was billed as, once per piece.
-async function speakClip(text, onGeneration) {
-  const pieces = speechPieces(speakableText(text));
-  const asked = [];
-  const ask = (i) => {
-    if (i >= pieces.length || asked[i]) return;
-    asked[i] = askPiece(pieces[i], i === 0);
-    asked[i].catch(() => {}); // it is answered for where it is awaited
-  };
-  for (let i = 0; i <= SPEECH_AHEAD; i++) ask(i);
-
-  const first = await asked[0]; // a refusal is the caller's to report
-  const voice = new Voice(first.rate);
-  voice.onfail = (err) => logIssue('warn', 'speak', errText(err)); // a clip that stops early
-  pourPieces(voice, pieces.length, asked, ask, onGeneration);
-
-  return voice;
-}
-
-// askPiece has one piece read. The piece next in line is taken as it arrives,
-// because it is the one that is holding everything up; the ones behind it are
-// read out in full, so that the request is finished with and its connection
-// freed while their samples wait their turn in memory. The browser only keeps
-// a handful of connections to one origin, and the event stream has one of
-// them for good.
-async function askPiece(text, next) {
-  const resp = await fetch('/api/speak', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ text, lang: settings.lang }),
-  });
-  if (!resp.ok) throw await httpError(resp);
-
-  const piece = {
-    rate: Number(resp.headers.get('X-Sample-Rate')),
-    generation: resp.headers.get('X-Generation-Id'),
-  };
-  if (next) piece.reader = resp.body.getReader();
-  else piece.samples = new Uint8Array(await resp.arrayBuffer());
-
-  return piece;
-}
-
-// pourPieces fills the voice from all count pieces in the order they are
-// spoken, asking for the next few through ask: a piece that comes back early
-// waits its turn in asked. It is left to run on its own — the caller already
-// has the clip and plays what is in it.
-async function pourPieces(voice, count, asked, ask, onGeneration) {
-  try {
-    for (let i = 0; i < count; i++) {
-      for (let j = i + 1; j <= i + SPEECH_AHEAD; j++) ask(j);
-      const piece = await asked[i];
-      if (onGeneration) onGeneration(piece.generation);
-      if (piece.reader) await pourPiece(voice, piece.reader); else voice.append(piece.samples);
-      voice.seam();
-    }
-    voice.finish();
-  } catch (err) {
-    voice.fail(err); // the words that did arrive still play
-  }
-}
-
-async function pourPiece(voice, reader) {
-  for (;;) {
-    const { value, done } = await reader.read();
-    if (done) return;
-    voice.append(value);
-  }
 }
