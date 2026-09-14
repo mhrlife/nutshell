@@ -13,7 +13,7 @@ import (
 const claudeBin = "claude"
 
 // instructions is what --append-system-prompt carries for the zero language.
-func instructions() string { return agent.Instructions(lang.Language{}) }
+func instructions() string { return agent.Instructions(lang.Language{}, agent.Structured) }
 
 func TestCommandDirectLaunch(t *testing.T) {
 	t.Parallel()
@@ -27,6 +27,7 @@ func TestCommandDirectLaunch(t *testing.T) {
 		"--output-format", streamJSON,
 		"--verbose",
 		"--append-system-prompt", instructions(),
+		"--json-schema", agent.AnswerSchema,
 		"--permission-prompt-tool", "stdio",
 		flagPermissionMode, defaultPermissionMode,
 		"--mcp-config", "mcp.json",
@@ -49,6 +50,7 @@ func TestCommandWrapperLaunch(t *testing.T) {
 		flagInputFormat, streamJSON,
 		"--",
 		"--append-system-prompt", instructions(),
+		"--json-schema", agent.AnswerSchema,
 		"--permission-prompt-tool", "stdio",
 		flagPermissionMode, defaultPermissionMode,
 	}

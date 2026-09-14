@@ -78,7 +78,7 @@ func TestMessageWithoutNotesIsUnchanged(t *testing.T) {
 func TestConclusionAsksForASummary(t *testing.T) {
 	t.Parallel()
 
-	if !strings.Contains(agent.Conclusion(), "<summary>") {
+	if !strings.Contains(agent.Conclusion(), "the summary") {
 		t.Error("the closing question never mentions the part that travels back")
 	}
 }

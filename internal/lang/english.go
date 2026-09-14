@@ -5,8 +5,8 @@ package lang
 var english = Language{
 	Code: "en",
 	Name: "English",
-	AgentRules: `Register of <summary>: spoken English, the way a developer talks to a colleague — contractions and all, not written prose read out.
-The <full> part keeps normal written English instead.`,
+	AgentRules: `Register of the summary: spoken English, the way a developer talks to a colleague — contractions and all, not written prose read out.
+The full answer keeps normal written English instead.`,
 	STTHint: "English, with the technical vocabulary of a software developer",
 	TTSNote: "The transcript is in English. Read it as a native English speaker does, with natural stress and phrasing.",
 }

@@ -8,7 +8,9 @@ the same interface). Go, standard library only; the browser UI is embedded.
 - `cmd/nutshell` – entry point: parse flags, build the logger, pick the agent,
   start the server.
 - `internal/agent` – the `Agent` interface plus the shared answer format
-  (`Instructions`, `ParseAnswer`). New agents go in `internal/agent/<name>`.
+  (`Instructions`, `AnswerSchema`, `DecodeAnswer`, `ParseAnswer`). An agent
+  that can hold its reply to a schema asks for the `Structured` format, any
+  other for `Tagged` text. New agents go in `internal/agent/<name>`.
   A question carries the `Thread` it belongs to: agents keep one conversation
   per thread, and start a thread it has not seen as a copy of its parent.
 - `internal/agent/claudecode` – Claude Code implementation. `Launch` picks how

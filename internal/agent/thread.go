@@ -55,7 +55,7 @@ const threadNote = `A message may open with one or more <side_thread> blocks. Th
 // in the usual language.
 const conclusionInstruction = `The user is done with this side thread and is going back to the conversation it was opened from.
 
-Do not do any more work and do not use any tools. In <summary>, write two to four sentences saying what this side thread settled: the answer it arrived at and anything from it that the other conversation needs. This is the only part that travels back, so it has to stand on its own — the other conversation never saw a word of this thread. In <full>, write the same conclusion with whatever detail is worth keeping.`
+Do not do any more work and do not use any tools. In the summary, write two to four sentences saying what this side thread settled: the answer it arrived at and anything from it that the other conversation needs. This is the only part that travels back, so it has to stand on its own — the other conversation never saw a word of this thread. In the full answer, write the same conclusion with whatever detail is worth keeping.`
 
 // Conclusion is the message that asks a side thread to sum itself up.
 func Conclusion() string { return conclusionInstruction }

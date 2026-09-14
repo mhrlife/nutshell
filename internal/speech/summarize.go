@@ -47,6 +47,6 @@ func SummarizeInstructions(l lang.Language) string {
 		return summarizeTask + "\n\nWrite it in the language of the passage, in the register someone would use saying it out loud."
 	}
 
-	return summarizeTask + "\n\nWrite it in " + l.Name + ". The rules below describe a reply with a <summary> and a <full> part: " +
-		"your summary follows the rules for <summary>, without the tags, and nothing about <full> applies.\n\n" + l.AgentRules
+	return summarizeTask + "\n\nWrite it in " + l.Name + ". The rules below describe a reply with a summary and a full answer: " +
+		"your summary follows the rules for the summary, and nothing about the full answer applies.\n\n" + l.AgentRules
 }

@@ -339,9 +339,11 @@ func handleEvent(ev streamEvent, progress func(agent.Event)) (agent.Answer, bool
 		for _, b := range parseBlocks(ev.Message) {
 			switch b.Type {
 			case "tool_use":
-				progress(agent.Event{Kind: agent.KindTool, Tool: b.Name, Detail: describeInput(b.Input)})
+				if b.Name != structuredOutputTool {
+					progress(agent.Event{Kind: agent.KindTool, Tool: b.Name, Detail: describeInput(b.Input)})
+				}
 			case "text":
-				if t := strings.TrimSpace(b.Text); t != "" && !strings.Contains(t, "<summary>") {
+				if t := strings.TrimSpace(b.Text); t != "" {
 					progress(agent.Event{Kind: agent.KindText, Text: t})
 				}
 			}
@@ -351,7 +353,11 @@ func handleEvent(ev streamEvent, progress func(agent.Event)) (agent.Answer, bool
 			return agent.Answer{}, true, fmt.Errorf("claude code: %s", ev.Result)
 		}
 
-		answer := agent.ParseAnswer(ev.Result)
+		answer, err := resultAnswer(ev)
+		if err != nil {
+			return agent.Answer{}, true, err
+		}
+
 		answer.CostUSD = ev.TotalCostUSD // cumulative; awaitResult turns it into a delta
 		answer.CostKnown = true
 

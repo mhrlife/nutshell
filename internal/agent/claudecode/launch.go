@@ -111,7 +111,10 @@ func (a *Agent) history() (id string, fork bool) {
 func (a *Agent) engineArgs() []string {
 	args := a.printArgs()
 	args = append(args,
-		"--append-system-prompt", agent.Instructions(a.language),
+		"--append-system-prompt", agent.Instructions(a.language, agent.Structured),
+		// Hold the final reply to the answer schema instead of trusting the
+		// instructions to keep its shape.
+		"--json-schema", agent.AnswerSchema,
 		// Route permission requests and questions to us over stdio instead
 		// of letting claude deny them for want of anyone to ask.
 		"--permission-prompt-tool", "stdio",

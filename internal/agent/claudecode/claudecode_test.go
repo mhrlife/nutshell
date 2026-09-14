@@ -54,13 +54,17 @@ func TestHandleEventReportsProgress(t *testing.T) {
 	progress := func(e agent.Event) { events = append(events, e) }
 
 	assistant := streamEvent{
-		Type:    typeAssistant,
-		Message: json.RawMessage(`{"content":[{"type":"tool_use","name":"Read","input":{"file_path":"a.go"}},{"type":"text","text":"Looking."}]}`),
+		Type: typeAssistant,
+		Message: json.RawMessage(`{"content":[` +
+			`{"type":"tool_use","name":"Read","input":{"file_path":"a.go"}},` +
+			`{"type":"text","text":"Looking."},` +
+			`{"type":"tool_use","name":"StructuredOutput","input":{"summary":"S","full":"F"}}]}`),
 	}
 	if _, done, err := handleEvent(assistant, progress); done || err != nil {
 		t.Fatalf("assistant event: done=%v err=%v", done, err)
 	}
 
+	// The StructuredOutput call is the answer, not a step towards it.
 	if len(events) != 2 || events[0].Tool != "Read" || events[0].Detail != "a.go" || events[1].Text != "Looking." {
 		t.Fatalf("unexpected progress events: %+v", events)
 	}
@@ -70,7 +74,12 @@ func TestHandleEventResult(t *testing.T) {
 	t.Parallel()
 
 	progress := func(agent.Event) {}
-	result := streamEvent{Type: typeResult, Result: "<summary>S</summary><full>F</full>", TotalCostUSD: 0.5}
+	result := streamEvent{
+		Type:             typeResult,
+		Result:           `{"summary":"S","full":"F"}`,
+		StructuredOutput: json.RawMessage(`{"summary":"S","full":"F"}`),
+		TotalCostUSD:     0.5,
+	}
 
 	answer, done, err := handleEvent(result, progress)
 	if !done || err != nil {
@@ -84,6 +93,25 @@ func TestHandleEventResult(t *testing.T) {
 	failed := streamEvent{Type: typeResult, IsError: true, Result: "boom"}
 	if _, done, err := handleEvent(failed, progress); !done || err == nil {
 		t.Errorf("error result: done=%v err=%v", done, err)
+	}
+}
+
+// The schema is checked, not guaranteed: a model that keeps failing it ends
+// the turn in plain text, and claude still reports success. That text is the
+// answer; structured output that cannot be read is an error.
+func TestHandleEventResultWithoutStructuredOutput(t *testing.T) {
+	t.Parallel()
+
+	progress := func(agent.Event) {}
+
+	gaveUp := streamEvent{Type: typeResult, Result: "Just prose.", StructuredOutput: json.RawMessage(`null`)}
+	if answer, _, err := handleEvent(gaveUp, progress); err != nil || answer.Summary != "Just prose." || answer.Full != "Just prose." {
+		t.Errorf("result without structured output: answer = %+v, err = %v", answer, err)
+	}
+
+	broken := streamEvent{Type: typeResult, StructuredOutput: json.RawMessage(`"not an object"`)}
+	if _, done, err := handleEvent(broken, progress); !done || err == nil {
+		t.Errorf("undecodable structured output: done=%v err=%v", done, err)
 	}
 }
 

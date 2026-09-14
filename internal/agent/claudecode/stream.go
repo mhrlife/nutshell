@@ -2,8 +2,11 @@ package claudecode
 
 import (
 	"encoding/json"
+	"fmt"
 	"strings"
 	"sync"
+
+	"github.com/mhrlife/nutshell/internal/agent"
 )
 
 // The stream event types nutshell acts on. Everything else claude writes —
@@ -17,6 +20,10 @@ const (
 	typeControlCancel = "control_cancel_request"
 )
 
+// structuredOutputTool is the tool claude hands its final reply to when it is
+// held to --json-schema. The call is the answer itself, not a step towards it.
+const structuredOutputTool = "StructuredOutput"
+
 // streamEvent is one line of `claude --output-format stream-json`.
 type streamEvent struct {
 	Type      string          `json:"type"`
@@ -25,6 +32,9 @@ type streamEvent struct {
 	Message   json.RawMessage `json:"message"`
 	Result    string          `json:"result"`
 	IsError   bool            `json:"is_error"`
+	// StructuredOutput is the final reply as the object --json-schema
+	// describes; Result then carries the same object as text.
+	StructuredOutput json.RawMessage `json:"structured_output"`
 	// RequestID and Request carry a control request: claude asking its host
 	// for permission, or for an answer to a question.
 	RequestID string          `json:"request_id"`
@@ -39,6 +49,25 @@ type contentBlock struct {
 	Name  string          `json:"name"`
 	Text  string          `json:"text"`
 	Input json.RawMessage `json:"input"`
+}
+
+// resultAnswer reads the answer out of a successful result. The schema is
+// checked, not guaranteed: claude hands a rejected reply back to the model,
+// but a model that keeps failing it ends the turn in plain text, and the
+// result still reports success. Such a result carries no structured output and
+// is split as a tagged reply, which with no tags in it is the whole text as
+// both parts.
+func resultAnswer(ev streamEvent) (agent.Answer, error) {
+	if len(ev.StructuredOutput) == 0 || string(ev.StructuredOutput) == "null" {
+		return agent.ParseAnswer(ev.Result), nil
+	}
+
+	answer, err := agent.DecodeAnswer(ev.Result, ev.StructuredOutput)
+	if err != nil {
+		return agent.Answer{}, fmt.Errorf("claude code: %w", err)
+	}
+
+	return answer, nil
 }
 
 func parseBlocks(raw json.RawMessage) []contentBlock {
