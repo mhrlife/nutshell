@@ -21,7 +21,7 @@ type Agent struct {
 	argv     []string
 	logger   *slog.Logger
 	asking   sync.Mutex
-	sessions map[string]string // guarded by asking
+	sessions map[string]conversation // guarded by asking
 	mu       sync.Mutex
 	cancel   context.CancelFunc
 	closed   bool
@@ -33,8 +33,12 @@ var _ agent.Agent = (*Agent)(nil)
 // configuration supplies the model, authentication and sandbox policy.
 func New(bin string, args []string, logger *slog.Logger) *Agent {
 	return &Agent{
-		argv:   slices.Concat([]string{bin, "app-server"}, args, []string{"--listen", "stdio://"}),
-		logger: logger, sessions: map[string]string{},
+		argv: slices.Concat([]string{
+			bin, "app-server",
+			"-c", `approval_policy="on-request"`,
+			"-c", `approvals_reviewer="auto_review"`,
+		}, args, []string{"--listen", "stdio://"}),
+		logger: logger, sessions: map[string]conversation{},
 	}
 }
 
@@ -137,35 +141,22 @@ func (a *Agent) ask(ctx context.Context, req agent.Request, r *run) (agent.Answe
 		return agent.Answer{}, err
 	}
 
-	method, params, err := a.threadParams(req)
+	r.threadID, err = a.openThread(setup, req, r)
 	if err != nil {
 		return agent.Answer{}, err
 	}
 
-	result, err := r.call(setup, method, params)
-	if err != nil {
-		return agent.Answer{}, err
-	}
-
-	var opened struct {
-		Thread struct {
-			ID string `json:"id"`
-		} `json:"thread"`
-	}
-	if err := json.Unmarshal(result, &opened); err != nil {
-		return agent.Answer{}, fmt.Errorf("codex thread: %w", err)
-	}
-
-	if opened.Thread.ID == "" {
-		return agent.Answer{}, errors.New("codex returned no thread id")
-	}
-
-	r.threadID = opened.Thread.ID
-	a.sessions[req.Thread.Name()] = r.threadID
+	// A completed turn has persisted history. Until then, keep the mapping
+	// provisional so a cancellation before the first turn can recover.
+	defer func() {
+		if r.finished {
+			a.sessions[req.Thread.Name()] = conversation{id: r.threadID}
+		}
+	}()
 
 	cancel()
 
-	result, err = r.call(ctx, "turn/start", map[string]any{
+	result, err := r.call(ctx, "turn/start", map[string]any{
 		keyThreadID:    r.threadID,
 		"input":        []map[string]string{{keyType: keyText, keyText: req.Message()}},
 		"outputSchema": json.RawMessage(agent.AnswerSchema),
@@ -200,25 +191,4 @@ func (a *Agent) ask(ctx context.Context, req agent.Request, r *run) (agent.Answe
 	}
 
 	return r.answer()
-}
-
-func (a *Agent) threadParams(req agent.Request) (string, map[string]any, error) {
-	params := map[string]any{"developerInstructions": agent.Instructions(req.Language, agent.Structured)}
-	if id := a.sessions[req.Thread.Name()]; id != "" {
-		params[keyThreadID] = id
-		return "thread/resume", params, nil
-	}
-
-	if req.Thread.Parent != "" {
-		id := a.sessions[req.Thread.Parent]
-		if id == "" {
-			return "", nil, fmt.Errorf("codex parent thread %q has no conversation", req.Thread.Parent)
-		}
-
-		params[keyThreadID] = id
-
-		return "thread/fork", params, nil
-	}
-
-	return "thread/start", params, nil
 }

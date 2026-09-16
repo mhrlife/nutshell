@@ -26,6 +26,10 @@ type rpcError struct {
 	Message string `json:"message"`
 }
 
+func (e *rpcError) Error() string {
+	return fmt.Sprintf("(%d): %s", e.Code, e.Message)
+}
+
 type received struct {
 	message
 	err error

@@ -102,7 +102,7 @@ func run(logger *slog.Logger, level *slog.LevelVar) error {
 	}
 
 	store := settings.New(settingsPath)
-	srvCfg := server.Config{Lang: cfg.Lang, Project: filepath.Base(cwd)}
+	srvCfg := server.Config{Lang: cfg.Lang, Project: filepath.Base(cwd), Cwd: cwd}
 	handler := server.New(ag, sp, store, http.FS(web.FS()), srvCfg, logger)
 
 	ln, err := listen(ctx, logger, cfg.Port)

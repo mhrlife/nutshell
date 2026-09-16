@@ -19,15 +19,19 @@ const (
 )
 
 type approvalParams struct {
-	ItemID                string            `json:"itemId"`
-	Command               string            `json:"command"`
-	Cwd                   string            `json:"cwd"`
-	Reason                string            `json:"reason"`
-	GrantRoot             string            `json:"grantRoot"`
-	Permissions           json.RawMessage   `json:"permissions"`
-	AdditionalPermissions json.RawMessage   `json:"additionalPermissions"`
-	AvailableDecisions    []json.RawMessage `json:"availableDecisions"`
-	Questions             []inputQuestion   `json:"questions"`
+	ItemID                 string            `json:"itemId"`
+	Command                string            `json:"command"`
+	Cwd                    string            `json:"cwd"`
+	Reason                 string            `json:"reason"`
+	GrantRoot              string            `json:"grantRoot"`
+	Permissions            json.RawMessage   `json:"permissions"`
+	AdditionalPermissions  json.RawMessage   `json:"additionalPermissions"`
+	AvailableDecisions     []json.RawMessage `json:"availableDecisions"`
+	Questions              []inputQuestion   `json:"questions"`
+	NetworkApprovalContext *struct {
+		Host     string `json:"host"`
+		Protocol string `json:"protocol"`
+	} `json:"networkApprovalContext"`
 }
 
 type inputQuestion struct {
@@ -60,6 +64,8 @@ func (r *run) prompt(ctx context.Context, m message) {
 		return
 	}
 
+	p.ID = r.promptPrefix + string(m.ID)
+
 	ctx, cancel := context.WithCancel(ctx)
 	r.prompts[string(m.ID)] = cancel
 	r.workers.Go(func() {
@@ -77,7 +83,7 @@ func (r *run) prompt(ctx context.Context, m message) {
 }
 
 func buildPrompt(m message, params approvalParams, changes string) (agent.Prompt, bool) {
-	p := agent.Prompt{ID: "codex:" + string(m.ID), Kind: agent.PromptPermission, Title: m.Method}
+	p := agent.Prompt{Kind: agent.PromptPermission, Title: m.Method}
 	switch m.Method {
 	case userInput:
 		p.Kind = agent.PromptChoice
@@ -100,7 +106,12 @@ func buildPrompt(m message, params approvalParams, changes string) (agent.Prompt
 		return p, len(p.Questions) > 0
 	case commandApproval:
 		p.Title = "Run command"
+
 		p.Detail = joinDetails(params.Command, params.Cwd, params.Reason, string(params.AdditionalPermissions))
+		if network := params.NetworkApprovalContext; network != nil {
+			p.Title = "Allow network access"
+			p.Detail = joinDetails("Host: "+network.Host, "Protocol: "+network.Protocol, p.Detail)
+		}
 	case fileApproval:
 		p.Title = "Change files"
 		p.Detail = joinDetails(changes, params.Reason, params.GrantRoot)

@@ -83,6 +83,12 @@ side threads, language changes, tool activity, structured spoken/full answers,
 command and file approvals, permission requests, user questions, and cancellation.
 Authentication, model selection, and sandbox policy come from Codex's own
 configuration; nutshell does not require another coding-model API key.
+Nutshell defaults to Codex's **Approve for me** behavior:
+`approval_policy="on-request"` and `approvals_reviewer="auto_review"`. Codex reviews
+eligible approval requests automatically within its configured sandbox policy.
+To route approvals to you instead, pass `-c 'approvals_reviewer="user"'`.
+Explicit app-server `-c` / `--config` arguments override these defaults, including
+`approval_policy` when you need a different policy.
 Voice still uses the separately configured speech providers.
 
 Forwarded arguments must be **app-server** arguments. For example:

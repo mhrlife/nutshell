@@ -218,3 +218,22 @@ func TestDeadProcessEndsTheTurnItWasCarrying(t *testing.T) {
 		t.Error("the turn ended with no error, though the process died under it")
 	}
 }
+
+func TestInitReportsMetadata(t *testing.T) {
+	t.Parallel()
+
+	a := New([]string{claudeBin}, DirectLaunch, nil, slog.New(slog.DiscardHandler))
+	proc, _ := scriptedProcess()
+
+	var got agent.Event
+
+	if err := proc.claim(t.Context(), newTurn(agent.ProgressFunc(func(ev agent.Event) { got = ev }))); err != nil {
+		t.Fatal(err)
+	}
+
+	a.route(t.Context(), proc, streamEvent{Type: typeSystem, Subtype: subtypeInit, Model: "claude-example", Cwd: "/work/example"})
+
+	if got.Kind != agent.KindMetadata || got.Model != "claude-example" || got.Cwd != "/work/example" {
+		t.Fatalf("metadata = %+v", got)
+	}
+}

@@ -163,7 +163,10 @@ func (a *Agent) route(ctx context.Context, proc *process, ev streamEvent) {
 			// The turn starts here, ahead of its first word, so that a
 			// question asked in the meantime waits for it instead of being
 			// answered with its result.
-			a.begin(proc)
+			turn := a.begin(proc)
+			if ev.Model != "" || ev.Cwd != "" {
+				turn.handler.Progress(agent.Event{Kind: agent.KindMetadata, Model: ev.Model, Cwd: ev.Cwd})
+			}
 		}
 
 		return

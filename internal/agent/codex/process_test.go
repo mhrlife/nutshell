@@ -8,11 +8,16 @@ import (
 	"os"
 	"slices"
 	"testing"
+
+	"github.com/mhrlife/nutshell/internal/agent"
 )
 
 const (
-	testSide     = "side"
-	testWithdraw = "withdraw"
+	testAnswer     = "answer"
+	testResumeRoot = "thread/resume:root"
+	testMissing    = "missing"
+	testSide       = "side"
+	testWithdraw   = "withdraw"
 )
 
 // TestCodexProcess is a protocol peer, launched as a child test executable.
@@ -87,18 +92,22 @@ func (p *mockPeer) handle(m message) error {
 		p.initialized = true
 	case "initialized":
 		return nil
-	case "thread/start", "thread/resume", "thread/fork":
+	case "thread/start", resumeThread, "thread/fork":
 		if !p.initialized {
 			return errors.New("thread before initialize")
 		}
 
 		p.method, p.thread, p.instructions = m.Method, params.ThreadID, params.DeveloperInstructions
 		if m.Method == "thread/start" {
-			p.thread = "root"
+			p.thread = agent.RootThread
 		}
 
 		if m.Method == "thread/fork" {
 			p.thread = testSide
+		}
+
+		if p.rejectResume(m, params.ThreadID) {
+			return nil
 		}
 
 		result = map[string]any{"thread": map[string]string{"id": p.thread}}
@@ -222,4 +231,19 @@ func (p *mockPeer) finish() {
 	}
 
 	p.event("turn/completed", map[string]any{keyThreadID: p.thread, keyTurn: map[string]string{"id": keyTurn, "status": status}})
+}
+
+func (p *mockPeer) rejectResume(m message, id string) bool {
+	if id != testMissing && id != "unavailable" {
+		return false
+	}
+
+	failure := rpcError{Code: -32600, Message: "no rollout found for thread id " + id}
+	if id == "unavailable" {
+		failure.Message = "permission denied reading rollout"
+	}
+
+	p.send(map[string]any{"id": m.ID, keyError: failure})
+
+	return true
 }

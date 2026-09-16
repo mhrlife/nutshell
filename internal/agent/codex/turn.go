@@ -2,6 +2,7 @@ package codex
 
 import (
 	"context"
+	"crypto/rand"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -18,6 +19,7 @@ type run struct {
 	handler          agent.Handler
 	logger           *slog.Logger
 	nextID           int
+	promptPrefix     string
 	threadID, turnID string
 	final, fallback  string
 	finished         bool
@@ -28,7 +30,7 @@ type run struct {
 }
 
 func newRun(p *process, h agent.Handler, logger *slog.Logger) *run {
-	return &run{proc: p, handler: h, logger: logger, prompts: map[string]context.CancelFunc{}, items: map[string]string{}}
+	return &run{promptPrefix: "codex:" + rand.Text() + ":", proc: p, handler: h, logger: logger, prompts: map[string]context.CancelFunc{}, items: map[string]string{}}
 }
 
 func (r *run) close() {
@@ -75,7 +77,7 @@ func (r *run) call(ctx context.Context, method string, params any) (json.RawMess
 
 		if m.Method == "" && string(m.ID) == id {
 			if m.Error != nil {
-				return nil, fmt.Errorf("codex %s (%d): %s", method, m.Error.Code, m.Error.Message)
+				return nil, fmt.Errorf("codex %s: %w", method, m.Error)
 			}
 
 			return m.Result, nil

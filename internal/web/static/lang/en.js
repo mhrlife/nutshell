@@ -3,6 +3,11 @@ registerLanguage({
   name: 'English',
   dir: 'ltr',
   strings: {
+    metadataAgent: 'Agent',
+    metadataModel: 'Model',
+    metadataFolder: 'Working directory',
+
+    modelPending: 'model available after first message',
     brand: 'nutshell',
     hint: 'Say what you need — a question, a task, some research. You hear the short version; the full text opens beside it.',
     docEmpty: 'Say what you need first;\nthe full text opens here',

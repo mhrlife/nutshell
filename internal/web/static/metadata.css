@@ -1,0 +1,41 @@
+.doc-head { gap: 12px; justify-content: flex-end; }
+.doc-tools { flex-shrink: 0; min-height: 32px; }
+.doc-head .icon-btn, .doc-head .cost { min-height: 32px; align-items: center; }
+.doc-head .icon-btn svg { display: block; flex-shrink: 0; }
+.doc-head .cost > span, .session-item summary span {
+  display: block; line-height: 1; text-box-trim: trim-both;
+}
+.session-info { display: flex; align-items: center; gap: 2px; min-width: 0; flex: 0 1 auto; }
+.session-item { position: relative; min-width: 0; color: var(--ink-2); font-size: 12px; }
+.session-item summary {
+  display: flex; align-items: center; gap: 6px; height: 32px; padding: 0 8px;
+  border-radius: 6px; cursor: pointer; list-style: none;
+}
+.session-item summary::-webkit-details-marker { display: none; }
+.session-item summary:hover, .session-item[open] summary { background: var(--rail); }
+.session-item summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.session-item svg { display: block; width: 16px; height: 16px; flex-shrink: 0; color: var(--ink-2); }
+.session-item summary span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#metadata-agent { flex-shrink: 0; }
+#metadata-agent svg { color: var(--accent); }
+#metadata-model, #metadata-cwd { max-width: 160px; }
+.session-detail {
+  position: absolute; z-index: 8; inset-block-start: calc(100% + 8px); inset-inline-end: 0;
+  width: max-content; max-width: min(320px, calc(100vw - 48px));
+  padding: 12px 14px; border: 1px solid var(--line); border-radius: 8px;
+  background: var(--paper); cursor: text;
+}
+.session-label { display: block; font-size: 11px; color: var(--ink-2); margin-bottom: 5px; }
+.session-value { display: block; font-family: var(--mono), var(--fa); font-size: 12px; overflow-wrap: anywhere; user-select: text; }
+#metadata-cwd .session-value { direction: ltr; text-align: start; }
+@media (max-width: 1150px) and (min-width: 901px) {
+  .doc-head { width: 100%; }
+  .session-item summary { padding-inline: 5px; gap: 4px; }
+}
+@media (max-width: 540px) {
+  .doc-head { flex-wrap: wrap; gap: 6px; }
+  .session-info { flex-basis: 100%; }
+  .doc-tools { margin-inline-start: auto; }
+  #metadata-model, #metadata-cwd { flex: 1; }
+  #metadata-cwd .session-detail { inset-inline-start: auto; inset-inline-end: 0; }
+}

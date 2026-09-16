@@ -126,3 +126,25 @@ func TestPromptDetailsAndUnsupportedRequests(t *testing.T) {
 		t.Fatal("secret question would be exposed in chat")
 	}
 }
+
+func TestNetworkApprovalDetails(t *testing.T) {
+	t.Parallel()
+
+	var params approvalParams
+
+	raw := `{"networkApprovalContext":{"host":"example.com","protocol":"https"},"availableDecisions":["accept","decline"]}`
+	if err := json.Unmarshal([]byte(raw), &params); err != nil {
+		t.Fatal(err)
+	}
+
+	p, ok := buildPrompt(message{Method: commandApproval}, params, "")
+	if !ok || p.Title != "Allow network access" {
+		t.Fatalf("network prompt = %+v", p)
+	}
+
+	for _, want := range []string{"example.com", "https"} {
+		if !strings.Contains(p.Detail, want) {
+			t.Errorf("network prompt missing %q: %+v", want, p)
+		}
+	}
+}

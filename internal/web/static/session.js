@@ -36,6 +36,7 @@ function connect() {
 // path, so a page that just reloaded cannot drift from one that never did.
 function apply(entry) {
   const { turn: id, kind, data, thread } = entry;
+  if (kind === 'metadata') { updateSessionMetadata(data); return; }
   if (kind === 'thread') { openThread(thread, data); return; }
   if (kind === 'thread_done') { finishThread(thread, data); return; }
 

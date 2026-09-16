@@ -48,15 +48,15 @@ func TestAskThreadsAndLanguage(t *testing.T) {
 		want     string
 	}{
 		{"new", agent.Thread{}, "en", "thread/start:root"},
-		{"resume", agent.Thread{}, "fa", "thread/resume:root"},
-		{"fork", agent.Thread{ID: testSide, Parent: "root"}, "en", "thread/fork:side"},
-		{"return", agent.Thread{}, "en", "thread/resume:root"},
-		{"side resume", agent.Thread{ID: testSide, Parent: "root"}, "fa", "thread/resume:side"},
+		{"resume", agent.Thread{}, "fa", testResumeRoot},
+		{"fork", agent.Thread{ID: testSide, Parent: agent.RootThread}, "en", "thread/fork:side"},
+		{"return", agent.Thread{}, "en", testResumeRoot},
+		{"side resume", agent.Thread{ID: testSide, Parent: agent.RootThread}, "fa", "thread/resume:side"},
 	}
 	for _, tc := range cases { //nolint:paralleltest // these are sequential turns on a shared agent
 		t.Run(tc.name, func(t *testing.T) {
 			req := agent.Request{
-				Text: "answer", Thread: tc.thread, Language: lang.Lookup(tc.language), Selection: "selected passage",
+				Text: testAnswer, Thread: tc.thread, Language: lang.Lookup(tc.language), Selection: "selected passage",
 				Notes: []agent.Note{{Title: "topic", Conclusion: "settled"}},
 			}
 
@@ -97,7 +97,7 @@ func TestAskFailures(t *testing.T) {
 				t.Fatal("expected failure")
 			}
 
-			if _, err := a.Ask(testContext(t), agent.Request{Text: "answer"}, agent.ProgressFunc(func(agent.Event) {})); err != nil {
+			if _, err := a.Ask(testContext(t), agent.Request{Text: testAnswer}, agent.ProgressFunc(func(agent.Event) {})); err != nil {
 				t.Fatalf("recovery: %v", err)
 			}
 		})
@@ -154,8 +154,8 @@ func TestCancelResumesHistory(t *testing.T) {
 		t.Fatalf("cancel: %v", err)
 	}
 
-	answer, err := a.Ask(testContext(t), agent.Request{Text: "answer"}, agent.ProgressFunc(func(agent.Event) {}))
-	if err != nil || answer.Summary != "thread/resume:root" {
+	answer, err := a.Ask(testContext(t), agent.Request{Text: testAnswer}, agent.ProgressFunc(func(agent.Event) {}))
+	if err != nil || answer.Summary != testResumeRoot {
 		t.Fatalf("resume = %+v, %v", answer, err)
 	}
 }
@@ -187,7 +187,7 @@ func TestCloseAndMissingParent(t *testing.T) {
 	t.Parallel()
 	a := testAgent(t)
 
-	_, err := a.Ask(testContext(t), agent.Request{Thread: agent.Thread{ID: testSide, Parent: "missing"}}, agent.ProgressFunc(func(agent.Event) {}))
+	_, err := a.Ask(testContext(t), agent.Request{Thread: agent.Thread{ID: testSide, Parent: testMissing}}, agent.ProgressFunc(func(agent.Event) {}))
 	if err == nil || !strings.Contains(err.Error(), "parent thread") {
 		t.Fatalf("missing parent: %v", err)
 	}
@@ -214,5 +214,29 @@ func TestAskParentCancellation(t *testing.T) {
 	_, err := a.Ask(ctx, agent.Request{Text: "wait"}, h)
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("parent cancellation: %v", err)
+	}
+}
+
+func TestPromptIDsAcrossTurns(t *testing.T) {
+	t.Parallel()
+	a := testAgent(t)
+	seen := map[string]bool{}
+
+	h := testHandler{prompt: func(_ context.Context, p agent.Prompt) (agent.Reply, error) {
+		if seen[p.ID] {
+			t.Errorf("prompt ID reused across turns: %s", p.ID)
+		}
+
+		seen[p.ID] = true
+		if p.Kind == agent.PromptChoice {
+			return agent.Reply{Choices: map[string][]string{"q": {"custom answer"}}}, nil
+		}
+
+		return agent.Reply{Choices: map[string][]string{decisionKey: {agent.OptionAllow}}}, nil
+	}}
+	for range 2 {
+		if _, err := a.Ask(testContext(t), agent.Request{Text: "prompts"}, h); err != nil {
+			t.Fatal(err)
+		}
 	}
 }
