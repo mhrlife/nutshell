@@ -1,6 +1,6 @@
 # nutshell
 
-Voice-first wrapper around a coding agent (Claude Code today, others behind
+Voice-first wrapper around a coding agent (Claude Code and Codex, behind
 the same interface). Go, standard library only; the browser UI is embedded.
 
 ## Layout
@@ -16,6 +16,9 @@ the same interface). Go, standard library only; the browser UI is embedded.
 - `internal/agent/claudecode` – Claude Code implementation. `Launch` picks how
   the CLI is reached: `DirectLaunch` runs it, `WrapperLaunch` runs a host CLI
   that starts it for us. `launch.go` owns the argv for both.
+- `internal/agent/codex` – Codex app-server over stdio. Each explicit turn
+  starts a process and starts, resumes, or forks a stored thread; cancellation
+  interrupts the turn before process cleanup. No autonomous background turns.
 - `internal/lang` – per-language rules for the agent, the transcriber and the
   voice. The browser sends its language code with every request; instructions
   are built from the entry for that code, never from all of them at once.

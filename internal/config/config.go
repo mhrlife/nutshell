@@ -62,7 +62,7 @@ type Config struct {
 
 // Agent is the coding agent nutshell drives.
 type Agent struct {
-	Name string   `json:"name"` // claude, or claude-wrapper
+	Name string   `json:"name"` // claude, codex, or claude-wrapper
 	Bin  string   `json:"bin"`  // executable; for claude-wrapper the host command and its subcommand
 	Args []string `json:"args"` // passed to the agent ahead of the flags forwarded from the command line
 }

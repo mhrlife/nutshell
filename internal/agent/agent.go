@@ -21,10 +21,14 @@ const (
 	KindTool Kind = "tool"
 	// KindText reports intermediate text the agent wrote before its final answer.
 	KindText Kind = "text"
+	// KindMetadata reports the effective model and working directory.
+	KindMetadata Kind = "metadata"
 )
 
 // Event is a progress update emitted while the agent works on a turn.
 type Event struct {
+	Model  string `json:"model,omitempty"`
+	Cwd    string `json:"cwd,omitempty"`
 	Kind   Kind   `json:"type"`
 	Tool   string `json:"name,omitempty"`   // tool name, for KindTool
 	Detail string `json:"detail,omitempty"` // one-line description of the tool input

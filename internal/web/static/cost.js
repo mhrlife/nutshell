@@ -44,8 +44,10 @@ function renderCostChip(node, c, title, agentName) {
   if (!node) return;
   node.hidden = !costHasData(c);
   if (node.hidden) return;
-  const suffix = c.agentKnown ? '' : '+';
-  node.innerHTML = `<span class="num">${fmtUSD(costTotal(c))}${suffix}</span>`
+  const total = costTotal(c);
+  const unknown = !c.agentKnown && total === 0;
+  const value = unknown ? t('costUnknown') : `${fmtUSD(total)}${c.agentKnown ? '' : '+'}`;
+  node.innerHTML = `<span${unknown ? '' : ' class="num"'}>${value}</span>`
     + `<div class="tip"><div class="row head"><span>${title}</span></div>${breakdownRows(c, agentName)}</div>`;
 }
 

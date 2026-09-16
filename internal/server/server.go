@@ -31,6 +31,7 @@ type Settings interface {
 
 // Config is what the UI learns about at startup.
 type Config struct {
+	Cwd     string // absolute working directory
 	Lang    string // default UI language
 	Project string // working directory name shown in the header
 }

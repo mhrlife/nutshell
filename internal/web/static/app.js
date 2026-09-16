@@ -34,6 +34,7 @@ function applyLanguage() {
   setActiveLanguage(settings.lang);
   el.brand.textContent = t('brand');
   el.brand.title = cfg.project || '';
+  renderSessionMetadata();
   el.emptyHint.textContent = t('hint');
   el.input.placeholder = t('placeholder');
   el.docEmpty.querySelector('p').textContent = t('docEmpty');

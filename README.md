@@ -16,7 +16,7 @@ summarized, to ask about it, or to ask about it somewhere else entirely (see
 [side threads](#side-threads)) — and the whole thing has a player, so you can
 listen to all of it while you do something else.
 
-nutshell starts a coding agent (Claude Code today) in the current directory,
+nutshell starts a coding agent (Claude Code or Codex) in the current directory,
 opens a small web UI on a local port, and wires it to speech-to-text
 and text-to-speech through OpenRouter, or any other API that speaks the
 OpenAI interface (see [configuration](#configuration)).
@@ -53,7 +53,8 @@ The script picks the build for your machine, checks it against
 
 Two more things before the first run:
 
-1. The agent's CLI has to be on your `PATH` — `claude` for Claude Code.
+1. The agent's CLI has to be on your `PATH` — `claude` for Claude Code, or
+   `codex` for Codex — and authenticated before starting nutshell.
 2. Give nutshell an OpenRouter key. Speech-to-text and text-to-speech both
    run through OpenRouter by default, so that key is what makes voice work.
    Put it in the [configuration file](#configuration):
@@ -64,6 +65,51 @@ Two more things before the first run:
 
    or, as a fallback, in the environment: `export OPENROUTER_API_KEY=sk-or-...`.
    Without a key the UI still works with typed messages; voice is switched off.
+
+## Using Codex
+
+```sh
+codex login
+cd your-project
+nutshell --agent codex
+```
+
+Or set `"agent": { "name": "codex" }` in the configuration file. Use
+`--agent-bin /path/to/codex` for an executable outside `PATH`.
+
+The adapter uses [Codex App Server](https://developers.openai.com/codex/app-server)
+over stdio, tested with Codex CLI 0.154.0. It supports conversation history,
+side threads, language changes, tool activity, structured spoken/full answers,
+command and file approvals, permission requests, user questions, and cancellation.
+Authentication, model selection, and sandbox policy come from Codex's own
+configuration; nutshell does not require another coding-model API key.
+Nutshell defaults to Codex's **Approve for me** behavior:
+`approval_policy="on-request"` and `approvals_reviewer="auto_review"`. Codex reviews
+eligible approval requests automatically within its configured sandbox policy.
+To route approvals to you instead, pass `-c 'approvals_reviewer="user"'`.
+Explicit app-server `-c` / `--config` arguments override these defaults, including
+`approval_policy` when you need a different policy.
+Voice still uses the separately configured speech providers.
+
+Forwarded arguments must be **app-server** arguments. For example:
+
+```sh
+nutshell --agent codex -c 'model="YOUR_MODEL_ID"'
+nutshell --agent codex -c 'model_reasoning_effort="high"'
+```
+
+Use `codex app-server --help` for supported flags; interactive CLI flags such
+as `--model` are not accepted by app-server. The stdio transport is managed by
+nutshell, so do not pass `--listen` or `--stdio` yourself.
+
+Each question starts an app-server process and resumes its saved conversation;
+cancellation interrupts the turn before closing the process. Automatic turns
+after a reply (background continuations), persistent approval rules, secret
+input fields, and MCP elicitation forms are not supported by this adapter.
+Unsupported requests are rejected explicitly. Approvals grant only the current
+action (or current turn for permission requests); no "always allow" option is
+offered. Coding cost is shown as unknown, rather than estimated from token use.
+Thread mappings are kept for the current nutshell run, not restored on restart.
 
 ## Behind a wrapper CLI
 
@@ -113,7 +159,7 @@ nutshell's own flags override the matching entry of the
 | `--port` | `0` (first free from 4700) | Port for the web UI |
 | `--no-open` | | Don't open the browser |
 | `--lang` | `en` | Default UI language (`en` or `fa`) |
-| `--agent` | `claude` | Which agent to drive: `claude`, or `claude-wrapper` for a host CLI that starts Claude Code for us |
+| `--agent` | `claude` | Which agent to drive: `claude`, `codex`, or `claude-wrapper` for a host CLI that starts Claude Code for us |
 | `--agent-bin` | | Path to the agent executable; for `claude-wrapper`, the host command and its subcommand |
 | `--stt-model` | `google/gemini-3.8-flash` | Speech-to-text model (a chat model with audio input) |
 | `--summary-model` | `google/gemini-3.8-flash` | Summarizes a selected passage before it is read aloud |

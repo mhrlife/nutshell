@@ -27,6 +27,7 @@ func (s *Server) handleConfig(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{
 		"lang":    s.cfg.Lang,
 		"project": s.cfg.Project,
+		"cwd":     s.cfg.Cwd,
 		"agent":   s.agent.Name(),
 		"voice":   s.speech.Enabled(),
 		"busy":    s.busy.Load(),

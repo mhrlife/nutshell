@@ -13,6 +13,7 @@
 <link rel="stylesheet" href="narrator.css">
 <link rel="stylesheet" href="transcribe.css">
 <link rel="stylesheet" href="threads.css">
+<link rel="stylesheet" href="metadata.css">
 </head>
 <body>
 <aside class="rail">
@@ -60,6 +61,20 @@
 
 <main class="doc" id="doc">
   <div class="doc-head">
+    <div class="session-info">
+      <details class="session-item" id="metadata-agent" name="session-metadata">
+        <summary><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="5" width="16" height="14" rx="3"/><path d="m8 10 3 2-3 2m6 0h2"/></svg><span id="session-agent" dir="auto"></span></summary>
+        <div class="session-detail"><span class="session-label"></span><span class="session-value" dir="auto"></span></div>
+      </details>
+      <details class="session-item" id="metadata-model" name="session-metadata">
+        <summary><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="7" y="7" width="10" height="10" rx="2"/><path d="M9 3v4m6-4v4M9 17v4m6-4v4M3 9h4m-4 6h4m10-6h4m-4 6h4"/></svg><span id="session-model" dir="auto"></span></summary>
+        <div class="session-detail"><span class="session-label"></span><span class="session-value" dir="auto"></span></div>
+      </details>
+      <details class="session-item" id="metadata-cwd" name="session-metadata">
+        <summary><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/></svg><span id="session-cwd" dir="auto"></span></summary>
+        <div class="session-detail"><span class="session-label"></span><span class="session-value" dir="auto"></span></div>
+      </details>
+    </div>
     <span class="doc-tools">
       <span id="doc-cost" class="cost" hidden></span>
       <button id="listen" class="icon-btn" type="button" hidden></button>
@@ -158,6 +173,7 @@
 <script src="speakable.js"></script>
 <script src="narrator.js"></script>
 <script src="transcribe.js"></script>
+<script src="metadata.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

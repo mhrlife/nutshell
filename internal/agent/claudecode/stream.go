@@ -26,6 +26,8 @@ const structuredOutputTool = "StructuredOutput"
 
 // streamEvent is one line of `claude --output-format stream-json`.
 type streamEvent struct {
+	Model     string          `json:"model"`
+	Cwd       string          `json:"cwd"`
 	Type      string          `json:"type"`
 	Subtype   string          `json:"subtype"`
 	SessionID string          `json:"session_id"`
