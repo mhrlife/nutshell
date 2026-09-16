@@ -19,6 +19,7 @@ import (
 
 	"github.com/mhrlife/nutshell/internal/agent"
 	"github.com/mhrlife/nutshell/internal/agent/claudecode"
+	"github.com/mhrlife/nutshell/internal/agent/codex"
 	"github.com/mhrlife/nutshell/internal/browser"
 	"github.com/mhrlife/nutshell/internal/cli"
 	"github.com/mhrlife/nutshell/internal/config"
@@ -183,6 +184,7 @@ func openBrowser(ctx context.Context, logger *slog.Logger, url string) {
 const (
 	agentClaude        = "claude"
 	agentClaudeWrapper = "claude-wrapper"
+	agentCodex         = "codex"
 )
 
 // defaultClaudeBin is the Claude Code CLI's own name on PATH.
@@ -190,6 +192,19 @@ const defaultClaudeBin = "claude"
 
 // newAgent picks the agent implementation the configuration names.
 func newAgent(cfg config.Agent, logger *slog.Logger) (agent.Agent, error) {
+	if cfg.Name == agentCodex {
+		bin := cfg.Bin
+		if bin == "" {
+			bin = agentCodex
+		}
+
+		if _, err := exec.LookPath(bin); err != nil {
+			return nil, fmt.Errorf("agent executable: %w", err)
+		}
+
+		return codex.New(bin, cfg.Args, logger), nil
+	}
+
 	launch, err := launchFor(cfg.Name)
 	if err != nil {
 		return nil, err
@@ -216,8 +231,8 @@ func launchFor(name string) (claudecode.Launch, error) {
 	case agentClaudeWrapper:
 		return claudecode.WrapperLaunch, nil
 	default:
-		return 0, fmt.Errorf("unknown agent %q (supported: %s, %s)",
-			name, agentClaude, agentClaudeWrapper)
+		return 0, fmt.Errorf("unknown agent %q (supported: %s, %s, %s)",
+			name, agentClaude, agentClaudeWrapper, agentCodex)
 	}
 }
 

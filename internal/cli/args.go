@@ -123,7 +123,7 @@ func register(fs *flag.FlagSet, v *flagValues) {
 	fs.BoolVar(&v.noOpen, "no-open", !def.OpenBrowser, "do not open the browser automatically")
 	fs.BoolVar(&v.debug, "debug", def.Debug, "log every API call, turn and speech request (--verbose stays the agent's own flag)")
 	fs.StringVar(&v.lang, "lang", def.Lang, "UI language code used until one is chosen in settings (the UI lists the available ones)")
-	fs.StringVar(&v.agent, "agent", def.Agent.Name, "coding agent to drive: claude, or claude-wrapper for a host CLI that starts Claude Code for us (needs --agent-bin)")
+	fs.StringVar(&v.agent, "agent", def.Agent.Name, "coding agent to drive: claude, codex, or claude-wrapper for a host CLI (needs --agent-bin)")
 	fs.StringVar(&v.agentBin, "agent-bin", def.Agent.Bin, "path to the agent executable (default: the agent's usual name); for claude-wrapper, the host command and its subcommand, e.g. \"divar-copilot agent\"")
 	fs.StringVar(&v.sttModel, "stt-model", def.STT.Model, "chat model with audio input that transcribes speech, on the stt provider")
 	fs.StringVar(&v.summaryModel, "summary-model", def.Summary.Model, "model that summarizes a selected passage before it is spoken, on the summary provider")
